@@ -6,6 +6,12 @@ pub mod system;
 pub struct VictronError(String);
 
 #[derive(Debug, Copy, Clone)]
+pub enum Side {
+    Input,
+    Output,
+}
+
+#[derive(Debug, Copy, Clone)]
 pub enum Line {
     L1 = 1,
     L2 = 2,

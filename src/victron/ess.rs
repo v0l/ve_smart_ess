@@ -7,7 +7,7 @@ pub struct VictronESS {
     client: VictronClient,
 }
 
-pub enum ESSRegister {
+pub enum ESS {
     /// Value in watts.
     /// Positive values take power from grid.
     /// Negative values feed into the grid.
@@ -26,45 +26,45 @@ impl VictronESS {
         Ok(Self { client: cli })
     }
 
-    pub async fn get_param(&mut self, reg: ESSRegister) -> Result<ESSRegister, VictronError> {
+    pub async fn get_param(&mut self, reg: ESS) -> Result<ESS, VictronError> {
         let addr = self.map_register(&reg);
         Ok(match reg {
-            ESSRegister::PowerSetPoint(l, _) => {
-                ESSRegister::PowerSetPoint(l, self.client.read_i16(addr).await?)
+            ESS::PowerSetPoint(l, _) => {
+                ESS::PowerSetPoint(l, self.client.read_i16(addr).await?)
             }
-            ESSRegister::DisableCharge(_) => {
-                ESSRegister::DisableCharge(self.client.read_bool(addr).await?)
+            ESS::DisableCharge(_) => {
+                ESS::DisableCharge(self.client.read_bool(addr).await?)
             }
-            ESSRegister::DisableFeedIn(_) => {
-                ESSRegister::DisableFeedIn(self.client.read_bool(addr).await?)
+            ESS::DisableFeedIn(_) => {
+                ESS::DisableFeedIn(self.client.read_bool(addr).await?)
             }
         })
     }
 
-    pub async fn set_param(&mut self, reg: ESSRegister) -> Result<(), VictronError> {
+    pub async fn set_param(&mut self, reg: ESS) -> Result<(), VictronError> {
         let addr = self.map_register(&reg);
         Ok(match reg {
-            ESSRegister::PowerSetPoint(_, power) => {
+            ESS::PowerSetPoint(_, power) => {
                 self.client.write_i16(addr, power).await?
             }
-            ESSRegister::DisableCharge(v) => {
+            ESS::DisableCharge(v) => {
                 self.client.write_u16(addr, if v { 1 } else { 0 }).await?
             }
-            ESSRegister::DisableFeedIn(v) => {
+            ESS::DisableFeedIn(v) => {
                 self.client.write_u16(addr, if v { 1 } else { 0 }).await?
             }
         })
     }
 
-    fn map_register(&self, reg: &ESSRegister) -> u16 {
+    fn map_register(&self, reg: &ESS) -> u16 {
         match reg {
-            ESSRegister::PowerSetPoint(l, _) => match l {
+            ESS::PowerSetPoint(l, _) => match l {
                 Line::L1 => 37,
                 Line::L2 => 40,
                 Line::L3 => 41,
             },
-            ESSRegister::DisableCharge(_) => 38,
-            ESSRegister::DisableFeedIn(_) => 39,
+            ESS::DisableCharge(_) => 38,
+            ESS::DisableFeedIn(_) => 39,
         }
     }
 }
