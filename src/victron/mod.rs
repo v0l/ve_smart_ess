@@ -1,9 +1,9 @@
 pub mod client;
 pub mod ess;
-pub mod system;
+pub mod ve_bus;
 
 #[derive(Debug)]
-pub struct VictronError(String);
+pub struct VictronError(pub String);
 
 #[derive(Debug, Copy, Clone)]
 pub enum Side {

@@ -1,10 +1,14 @@
+extern crate core;
+
 use std::thread::sleep;
 use std::time::Duration;
+use crate::smart_ess::Controller;
 use crate::victron::ess::{ESS, VictronESS};
-use crate::victron::system::{VEBus, VictronSystem};
+use crate::victron::ve_bus::{Register, VictronBus};
 use crate::victron::{Line, Side, VictronError};
 
 mod victron;
+mod smart_ess;
 
 const INVERTER: u8 = 227;
 const BATTERY: u8 = 225;
@@ -12,7 +16,11 @@ const SYSTEM: u8 = 100;
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn main() -> Result<(), VictronError> {
-    let mut vs = VictronSystem::new("10.100.1.58:502".parse().unwrap(), INVERTER).await?;
+    let mut vs = VictronBus::new("10.100.1.58:502".parse().unwrap(), INVERTER).await?;
+
+    let ctr = Controller::load().map_err(|e| VictronError(e.0))?;
+
+    println!("{:?}", ctr);
 
     loop {
         let phases = vs.get(VEBus::PhaseCount).await?;

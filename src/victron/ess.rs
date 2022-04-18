@@ -13,9 +13,9 @@ pub enum ESS {
     /// Negative values feed into the grid.
     PowerSetPoint(Line, i16),
 
-    /// Disable charger 0/1
+    /// Disable charger
     DisableCharge(bool),
-    /// Disable feed-in to grid 0/1
+    /// Disable feed-in to grid
     DisableFeedIn(bool),
 }
 

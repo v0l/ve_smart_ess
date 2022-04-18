@@ -3,29 +3,29 @@ use crate::victron::{Line, LineDetail, Side, VictronError};
 use std::net::SocketAddr;
 use std::ops::Div;
 
-pub struct VictronSystem {
+pub struct VictronBus {
     client: VictronClient,
 }
 
-pub enum VEBusMode {
+pub enum Mode {
     ChargerOnly = 1,
     InverterOnly = 2,
     On = 3,
     Off = 4,
 }
 
-impl ToString for VEBusMode {
+impl ToString for Mode {
     fn to_string(&self) -> String {
         match self {
-            VEBusMode::ChargerOnly => "Charger Only",
-            VEBusMode::InverterOnly => "Inverter Only",
-            VEBusMode::On => "On",
-            VEBusMode::Off => "Off",
+            Mode::ChargerOnly => "Charger Only",
+            Mode::InverterOnly => "Inverter Only",
+            Mode::On => "On",
+            Mode::Off => "Off",
         }.to_owned()
     }
 }
 
-pub enum VEBus {
+pub enum Register {
     InputVoltage(Line),
     InputCurrent(Line),
     InputFrequency(Line),
@@ -45,7 +45,9 @@ pub enum VEBus {
     ActiveInput,
 
     Mode,
-    Alarm(VEBusAlarm),
+    Alarm(Alarm),
+
+    ACInputIgnore(Line, bool),
 }
 
 pub enum ActiveInput {
@@ -77,30 +79,30 @@ impl TryInto<Line> for ActiveInput {
 }
 
 #[derive(Copy, Clone)]
-pub enum VEBusAlarmState {
+pub enum AlarmState {
     Ok = 0,
     Warning = 1,
     Alarm = 2,
 }
 
 #[derive(Copy, Clone)]
-pub enum VEBusAlarm {
-    HighTemperature(VEBusAlarmState),
-    LowBattery(VEBusAlarmState),
-    Overload(VEBusAlarmState),
-    TemperatureSensor(VEBusAlarmState),
-    VoltageSensor(VEBusAlarmState),
+pub enum Alarm {
+    HighTemperature(AlarmState),
+    LowBattery(AlarmState),
+    Overload(AlarmState),
+    TemperatureSensor(AlarmState),
+    VoltageSensor(AlarmState),
 
-    LineTemperature(Line, VEBusAlarmState),
-    LineLowBattery(Line, VEBusAlarmState),
-    LineOverload(Line, VEBusAlarmState),
-    LineRipple(Line, VEBusAlarmState),
+    LineTemperature(Line, AlarmState),
+    LineLowBattery(Line, AlarmState),
+    LineOverload(Line, AlarmState),
+    LineRipple(Line, AlarmState),
 
-    PhaseRotation(VEBusAlarmState),
-    GridLost(VEBusAlarmState),
+    PhaseRotation(AlarmState),
+    GridLost(AlarmState),
 }
 
-impl VictronSystem {
+impl VictronBus {
     pub async fn new(addr: SocketAddr, unit: u8) -> Result<Self, VictronError> {
         let mut cli = VictronClient::new(addr).await?;
         cli.set_unit(unit);
@@ -115,10 +117,10 @@ impl VictronSystem {
     }
 
     async fn input_info(&mut self, line: Line) -> Result<LineDetail, VictronError> {
-        let v = self.get(VEBus::InputVoltage(line)).await?;
-        let i = self.get(VEBus::InputCurrent(line)).await?;
-        let f = self.get(VEBus::InputFrequency(line)).await?;
-        let p = self.get(VEBus::InputPower(line)).await?;
+        let v = self.get(Register::InputVoltage(line)).await?;
+        let i = self.get(Register::InputCurrent(line)).await?;
+        let f = self.get(Register::InputFrequency(line)).await?;
+        let p = self.get(Register::InputPower(line)).await?;
 
         Ok(LineDetail {
             voltage: v as f32 / 10f32,
@@ -129,10 +131,10 @@ impl VictronSystem {
     }
 
     async fn output_info(&mut self, line: Line) -> Result<LineDetail, VictronError> {
-        let v = self.get(VEBus::OutputVoltage(line)).await?;
-        let i = self.get(VEBus::OutputCurrent(line)).await?;
-        let f = self.get(VEBus::OutputFrequency).await?;
-        let p = self.get(VEBus::OutputPower(line)).await?;
+        let v = self.get(Register::OutputVoltage(line)).await?;
+        let i = self.get(Register::OutputCurrent(line)).await?;
+        let f = self.get(Register::OutputFrequency).await?;
+        let p = self.get(Register::OutputPower(line)).await?;
 
         Ok(LineDetail {
             voltage: v as f32 / 10f32,
@@ -142,23 +144,23 @@ impl VictronSystem {
         })
     }
 
-    pub async fn get_mode(&mut self) -> Result<VEBusMode, VictronError> {
-        let m = self.get(VEBus::Mode).await?;
+    pub async fn get_mode(&mut self) -> Result<Mode, VictronError> {
+        let m = self.get(Register::Mode).await?;
         Ok(match m {
-            1 => VEBusMode::ChargerOnly,
-            2 => VEBusMode::InverterOnly,
-            3 => VEBusMode::On,
-            4 => VEBusMode::Off,
+            1 => Mode::ChargerOnly,
+            2 => Mode::InverterOnly,
+            3 => Mode::On,
+            4 => Mode::Off,
             e => return Err(VictronError(format!("Invalid mode {}!", e)))
         })
     }
 
-    pub async fn set_mode(&mut self, mode: VEBusMode) -> Result<(), VictronError> {
-        self.client.write_u16(self.get_register(VEBus::Mode), mode as u16).await
+    pub async fn set_mode(&mut self, mode: Mode) -> Result<(), VictronError> {
+        self.client.write_u16(self.get_register(Register::Mode)?, mode as u16).await
     }
 
     pub async fn get_active_input(&mut self) -> Result<ActiveInput, VictronError> {
-        let a = self.get(VEBus::ActiveInput).await?;
+        let a = self.get(Register::ActiveInput).await?;
         Ok(match a {
             0 => ActiveInput::Line1,
             1 => ActiveInput::Line2,
@@ -167,9 +169,9 @@ impl VictronSystem {
         })
     }
 
-    pub async fn get_alarms(&mut self) -> Result<Vec<VEBusAlarm>, VictronError> {
-        use VEBusAlarm::*;
-        use VEBusAlarmState::*;
+    pub async fn get_alarms(&mut self) -> Result<Vec<Alarm>, VictronError> {
+        use crate::victron::ve_bus::Alarm::*;
+        use AlarmState::*;
         use Line::*;
         let mut all_alarms = vec![
             HighTemperature(Ok),
@@ -195,39 +197,40 @@ impl VictronSystem {
 
 
         for alarm in all_alarms.iter_mut() {
-            let sv = self.client.read_u16(self.get_register(VEBus::Alarm(alarm.clone()))).await?;
+            let sv = self.client.read_u16(self.get_register(Register::Alarm(alarm.clone()))?).await?;
             let state = match sv {
-                0 => VEBusAlarmState::Ok,
-                1 => VEBusAlarmState::Warning,
-                2 => VEBusAlarmState::Alarm,
+                0 => AlarmState::Ok,
+                1 => AlarmState::Warning,
+                2 => AlarmState::Alarm,
                 e => return Err(VictronError(format!("Invalid alarm state {}!", e)))
             };
 
             match alarm {
-                HighTemperature(mut v) => v = state,
-                LowBattery(mut v) => v = state,
-                Overload(mut v) => v = state,
-                TemperatureSensor(mut v) => v = state,
-                VoltageSensor(mut v) => v = state,
-                LineTemperature(_, mut v) => v = state,
-                LineLowBattery(_, mut v) => v = state,
-                LineOverload(_, mut v) => v = state,
-                LineRipple(_, mut v) => v = state,
-                PhaseRotation(mut v) => v = state,
-                GridLost(mut v) => v = state,
+                HighTemperature(mut _v) => _v = state,
+                LowBattery(mut _v) => _v = state,
+                Overload(mut _v) => _v = state,
+                TemperatureSensor(mut _v) => _v = state,
+                VoltageSensor(mut _v) => _v = state,
+                LineTemperature(_, mut _v) => _v = state,
+                LineLowBattery(_, mut _v) => _v = state,
+                LineOverload(_, mut _v) => _v = state,
+                LineRipple(_, mut _v) => _v = state,
+                PhaseRotation(mut _v) => _v = state,
+                GridLost(mut _v) => _v = state,
             }
         }
 
         Result::Ok(all_alarms)
     }
 
-    pub async fn get(&mut self, reg: VEBus) -> Result<u16, VictronError> {
-        self.client.read_u16(self.get_register(reg)).await
+    pub async fn get(&mut self, reg: Register) -> Result<u16, VictronError> {
+        self.client.read_u16(self.get_register(reg)?).await
     }
 
-    fn get_register(&self, reg: VEBus) -> u16 {
-        use VEBus::*;
-        match reg {
+    fn get_register(&self, reg: Register) -> Result<u16, VictronError> {
+        use crate::victron::ve_bus::Alarm as BusAlarm;
+        use Register::*;
+        Ok(match reg {
             InputVoltage(l) => 2 + l as u16,
             InputCurrent(l) => 5 + l as u16,
             InputFrequency(l) => 8 + l as u16,
@@ -248,18 +251,23 @@ impl VictronSystem {
 
             Mode => 33,
             Alarm(a) => match a {
-                VEBusAlarm::HighTemperature(_) => 34,
-                VEBusAlarm::LowBattery(_) => 35,
-                VEBusAlarm::Overload(_) => 36,
-                VEBusAlarm::TemperatureSensor(_) => 42,
-                VEBusAlarm::VoltageSensor(_) => 43,
-                VEBusAlarm::LineTemperature(l, _) => 44 + (4 * (l as u16 - 1)),
-                VEBusAlarm::LineLowBattery(l, _) => 45 + (4 * (l as u16 - 1)),
-                VEBusAlarm::LineOverload(l, _) => 46 + (4 * (l as u16 - 1)),
-                VEBusAlarm::LineRipple(l, _) => 47 + (4 * (l as u16 - 1)),
-                VEBusAlarm::PhaseRotation(_) => 63,
-                VEBusAlarm::GridLost(_) => 64,
+                BusAlarm::HighTemperature(_) => 34,
+                BusAlarm::LowBattery(_) => 35,
+                BusAlarm::Overload(_) => 36,
+                BusAlarm::TemperatureSensor(_) => 42,
+                BusAlarm::VoltageSensor(_) => 43,
+                BusAlarm::LineTemperature(l, _) => 44 + (4 * (l as u16 - 1)),
+                BusAlarm::LineLowBattery(l, _) => 45 + (4 * (l as u16 - 1)),
+                BusAlarm::LineOverload(l, _) => 46 + (4 * (l as u16 - 1)),
+                BusAlarm::LineRipple(l, _) => 47 + (4 * (l as u16 - 1)),
+                BusAlarm::PhaseRotation(_) => 63,
+                BusAlarm::GridLost(_) => 64,
+            },
+            ACInputIgnore(l, _) => match l {
+                Line::L1 => 69,
+                Line::L2 => 70,
+                Line::L3 => return Err(VictronError("No AC Input Ignore for Line 3!".to_owned()))
             }
-        }
+        })
     }
 }

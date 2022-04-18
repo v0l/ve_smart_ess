@@ -1,0 +1,111 @@
+{
+  "rates": [
+    {
+      "name": "Day",
+      "unit_cost": 0.2496,
+      "windows": [
+        {
+          "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Sunday"],
+          "start": {
+            "hour": 9,
+            "minute": 0
+          },
+          "end": {
+            "hour": 16,
+            "minute": 59
+          }
+        },
+        {
+          "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          "start": {
+            "hour": 19,
+            "minute": 0
+          },
+          "end": {
+            "hour": 22,
+            "minute": 59
+          }
+        }
+      ],
+      "discharge": "Spread",
+      "charge": {
+        "mode": "Disabled",
+        "unit_limit": 0
+      },
+      "reserve": 0
+    },
+    {
+      "name": "Night",
+      "unit_cost": 0.1834,
+      "windows": [
+        {
+          "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          "start": {
+            "hour": 23,
+            "minute": 0
+          },
+          "end": {
+            "hour": 7,
+            "minute": 59
+          }
+        }
+      ],
+      "discharge": "None",
+      "charge": {
+        "mode": {
+          "Capacity": 1.0
+        },
+        "unit_limit": 0
+      },
+      "reserve": 0
+    },
+    {
+      "name": "Peak",
+      "unit_cost": 0.3049,
+      "windows": [
+        {
+          "days": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          "start": {
+            "hour": 17,
+            "minute": 0
+          },
+          "end": {
+            "hour": 18,
+            "minute": 59
+          }
+        }
+      ],
+      "discharge": "Spread",
+      "charge": {
+        "mode": "Disabled",
+        "unit_limit": 0
+      },
+      "reserve": 2
+    },
+    {
+      "name": "Free",
+      "unit_cost": 0,
+      "windows": [
+        {
+          "days": ["Saturday"],
+          "start": {
+            "hour": 17,
+            "minute": 0
+          },
+          "end": {
+            "hour": 20,
+            "minute": 59
+          }
+        }
+      ],
+      "discharge": "None",
+      "charge": {
+        "mode": {
+          "Capacity": 1.0
+        },
+        "unit_limit": 0
+      },
+      "reserve": 0
+    }
+  ]
+}
