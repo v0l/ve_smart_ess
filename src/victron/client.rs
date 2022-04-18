@@ -33,7 +33,7 @@ impl VictronClient {
     }
 
     pub async fn read_bool(&mut self, addr: u16) -> Result<bool, VictronError> {
-        Ok(match self.read_u16(addr).await? {
+        Ok(match dbg!(self.read_u16(addr).await?) {
             0 => false,
             1 => true,
             _ => return Err(VictronError("Unknown bool state!".to_owned()))

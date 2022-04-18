@@ -1,10 +1,12 @@
 use std::cmp::Ordering;
-use std::ops::Index;
+use std::ops::{Add, Index};
 use std::str::FromStr;
+use std::time::Duration;
 use chrono::{Datelike, DateTime, Timelike, Utc};
+use chrono::format::Numeric::Day;
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Weekday {
     Monday,
     Tuesday,
@@ -55,14 +57,21 @@ impl RateWindow {
         days.sort();
 
         let today: Weekday = from.weekday().into();
-        let next_weekday = if days.contains(&today) {
-            Some(&today)
+        let from_time: RateTime = from.into();
+        let next_weekday = if days.contains(&today) && self.start >= from_time {
+            Some((&today))
         } else {
             let wrap = days.iter().filter(|d| d.lt(&&today));
             days.iter().filter(|d| d.gt(&&today)).chain(wrap).next()
         };
+        let mut days_from_today = *(next_weekday?) as i64 - today as i64 % 7;
+        if days_from_today < 0 {
+            days_from_today += 7;
+        }
 
-        None
+        Some(from.date()
+            .and_hms(self.start.hour as u32, self.start.minute as u32, 0)
+            + chrono::Duration::days(days_from_today))
     }
 
     pub fn inside(&self, time: &RateTime) -> bool {
@@ -137,6 +146,7 @@ impl Ord for RateTime {
 
 #[cfg(test)]
 mod tests {
+    use chrono::TimeZone;
     use super::*;
 
     #[test]
@@ -159,28 +169,40 @@ mod tests {
     }
 
     #[test]
-    fn today() {
-        let now = Utc::now();
+    fn rate_next_from() {
+        let a_monday = Utc.ymd(2022, 04, 18).and_hms(8, 0, 0);
+        let a_saturday = Utc.ymd(2022, 04, 16).and_hms(8, 0, 0);
+        let a_friday = Utc.ymd(2022, 04, 22).and_hms(8, 59, 59);
+        let a_sunday_inside = Utc.ymd(2022, 04, 24).and_hms(16, 0, 0);
 
         let rate = RateWindow {
             start: RateTime::from_str("09:00").unwrap(),
             end: RateTime::from_str("16:59").unwrap(),
-            days: vec![now.weekday().into()],
+            days: vec![Weekday::Sunday, Weekday::Friday],
         };
 
-        let next = rate.next_from(now);
-        assert_ne!(None, next);
+        let next = rate.next_from(a_monday);
+        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.unwrap());
+
+        let next = rate.next_from(a_saturday);
+        assert_eq!(Utc.ymd(2022, 04, 17).and_hms(9, 0, 0), next.unwrap());
+
+        let next = rate.next_from(a_friday);
+        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.unwrap());
+
+        let next = rate.next_from(a_sunday_inside);
+        assert_eq!(Utc.ymd(2022, 04, 29).and_hms(9, 0, 0), next.unwrap());
     }
 
     #[test]
-    fn tomorrow() {}
+    fn rate_never() {
+        let rate = RateWindow {
+            start: RateTime::from_str("09:00").unwrap(),
+            end: RateTime::from_str("16:59").unwrap(),
+            days: vec![],
+        };
 
-    #[test]
-    fn few_days() {}
-
-    #[test]
-    fn rollover() {}
-
-    #[test]
-    fn never() {}
+        let next = rate.next();
+        assert_eq!(None, next);
+    }
 }

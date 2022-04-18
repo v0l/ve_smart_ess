@@ -7,16 +7,18 @@ pub struct VictronESS {
     client: VictronClient,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum ESS {
     /// Value in watts.
     /// Positive values take power from grid.
     /// Negative values feed into the grid.
     PowerSetPoint(Line, i16),
 
-    /// Disable charger
-    DisableCharge(bool),
-    /// Disable feed-in to grid
-    DisableFeedIn(bool),
+    /// Control charge load, 0 = Disabled charge, 100 = Full charge power
+    ChargePower(u8),
+
+    /// Control feed-in from battery, 0 = Disabled, 100 = Full feed-in power
+    FeedInPower(u8),
 }
 
 impl VictronESS {
@@ -32,11 +34,11 @@ impl VictronESS {
             ESS::PowerSetPoint(l, _) => {
                 ESS::PowerSetPoint(l, self.client.read_i16(addr).await?)
             }
-            ESS::DisableCharge(_) => {
-                ESS::DisableCharge(self.client.read_bool(addr).await?)
+            ESS::ChargePower(_) => {
+                ESS::ChargePower(self.client.read_u16(addr).await? as u8)
             }
-            ESS::DisableFeedIn(_) => {
-                ESS::DisableFeedIn(self.client.read_bool(addr).await?)
+            ESS::FeedInPower(_) => {
+                ESS::FeedInPower(self.client.read_u16(addr).await? as u8)
             }
         })
     }
@@ -47,11 +49,11 @@ impl VictronESS {
             ESS::PowerSetPoint(_, power) => {
                 self.client.write_i16(addr, power).await?
             }
-            ESS::DisableCharge(v) => {
-                self.client.write_u16(addr, if v { 1 } else { 0 }).await?
+            ESS::ChargePower(v) => {
+                self.client.write_u16(addr, v as u16).await?
             }
-            ESS::DisableFeedIn(v) => {
-                self.client.write_u16(addr, if v { 1 } else { 0 }).await?
+            ESS::FeedInPower(v) => {
+                self.client.write_u16(addr, v as u16).await?
             }
         })
     }
@@ -63,8 +65,8 @@ impl VictronESS {
                 Line::L2 => 40,
                 Line::L3 => 41,
             },
-            ESS::DisableCharge(_) => 38,
-            ESS::DisableFeedIn(_) => 39,
+            ESS::ChargePower(_) => 38,
+            ESS::FeedInPower(_) => 39,
         }
     }
 }

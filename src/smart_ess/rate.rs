@@ -46,11 +46,29 @@ pub struct RateCharge {
     unit_limit: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum ChargeMode {
     /// Charger is disabled
     Disabled,
 
     /// target minimum battery capacity
     Capacity(f32),
+}
+
+impl Rate {
+    pub fn next_from(&self, from: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        let items :Vec<DateTime<Utc>> = self.windows.iter()
+            .map(|w| w.next_from(from))
+            .filter(|f| f.is_some())
+            .map(|f| f.unwrap())
+            .collect();
+
+        Some(items.first()?.clone())
+    }
+}
+
+impl RateCharge {
+    pub fn charge_enabled(&self) -> bool {
+        self.mode != ChargeMode::Disabled
+    }
 }

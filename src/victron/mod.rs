@@ -11,7 +11,7 @@ pub enum Side {
     Output,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Line {
     L1 = 1,
     L2 = 2,
@@ -20,8 +20,8 @@ pub enum Line {
 
 #[derive(Debug, Copy, Clone)]
 pub struct LineDetail {
-    voltage: f32,
-    current: f32,
-    frequency: f32,
-    power: f32,
+    pub voltage: f32,
+    pub current: f32,
+    pub frequency: f32,
+    pub power: f32,
 }
