@@ -34,18 +34,18 @@ pub async fn main() -> Result<(), VictronError> {
 
         // ess
         let set_point = ess.get_param(ESS::PowerSetPoint(Line::L1, 0)).await?;
-        let disable_charger = ess.get_param(ESS::ChargePower(0)).await?;
-        let disable_feed_in = ess.get_param(ESS::FeedInPower(0)).await?;
+        let disable_charger = ess.get_param(ESS::DisableCharge(false)).await?;
+        let disable_feed_in = ess.get_param(ESS::DisableFeedIn(false)).await?;
 
         let target_set_point = (out1.power / 2f32) as i16;
         if set_point != ESS::PowerSetPoint(Line::L1, target_set_point) {
             //ess.set_param(ESS::PowerSetPoint(Line::L1, target_set_point)).await?;
         }
-        if disable_feed_in != ESS::FeedInPower(0) {
-            ess.set_param(ESS::FeedInPower(0)).await?;
+        if disable_feed_in != ESS::DisableFeedIn(false) {
+            ess.set_param(ESS::DisableFeedIn(false)).await?;
         }
-        if disable_charger != ESS::ChargePower(100) {
-            ess.set_param(ESS::ChargePower(100)).await?;
+        if disable_charger != ESS::DisableCharge(false) {
+            ess.set_param(ESS::DisableCharge(false)).await?;
         }
 
         println!("=== SCHEDULE ===");
