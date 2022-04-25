@@ -38,13 +38,13 @@ impl Controller {
             Err(e) => File::create(path)?
         };
         let mut json = String::new();
-        file.read_to_string(&mut json);
+        file.read_to_string(&mut json)?;
         let v: Controller = serde_json::from_str(&json)?;
         Ok(v)
     }
 
-    pub fn next_charge_from(&self, from: DateTime<Utc>) -> Result<Schedule, ControllerError> {
-        if let Some(v) = self.get_schedule_from(from)
+    pub fn next_charge(&self, from: DateTime<Utc>) -> Result<Schedule, ControllerError> {
+        if let Some(v) = self.get_schedule(from)
             .iter().filter(|s| s.rate.charge.charge_enabled())
             .take(1).next() {
             Ok(v.clone())
@@ -53,13 +53,16 @@ impl Controller {
         }
     }
 
-    pub fn get_schedule_from(&self, from: DateTime<Utc>) -> Vec<Schedule> {
+    pub fn get_schedule(&self, from: DateTime<Utc>) -> Vec<Schedule> {
         let mut sch: Vec<Schedule> = self.rates.iter()
-            .map(|e| (e, e.next_from(from)))
-            .filter(|f| f.1.is_some())
-            .map(|e| Schedule { rate: e.0.clone(), start: e.1.unwrap() })
+            .map(|e| (e, e.schedule(from)))
+            .map(|e| e.1.iter()
+                .map(|f| Schedule { rate: e.0.clone(), start: f.clone() })
+                .collect::<Vec<Schedule>>())
+            .flatten()
             .collect();
-        sch.sort_by(|a,b| a.start.cmp(&b.start));
+
+        sch.sort_by(|a, b| a.start.cmp(&b.start));
         sch
     }
 }

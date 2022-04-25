@@ -8,6 +8,36 @@ pub struct VictronESS {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Hub4Mode {
+    WithPhaseCompensation = 1,
+    WithoutPhaseCompensation = 2,
+    External = 3,
+}
+
+impl TryFrom<u8> for Hub4Mode {
+    type Error = VictronError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            1 => Hub4Mode::WithPhaseCompensation,
+            2 => Hub4Mode::WithoutPhaseCompensation,
+            3 => Hub4Mode::External,
+            e => return Err(VictronError(format!("Invalid Hub4 mode {}!", e)))
+        })
+    }
+}
+
+impl ToString for Hub4Mode {
+    fn to_string(&self) -> String {
+        match self {
+            Hub4Mode::WithPhaseCompensation => "ESS with phase compensation",
+            Hub4Mode::WithoutPhaseCompensation => "ESS without phase compensation",
+            Hub4Mode::External => "Disabled / External Control",
+        }.to_owned()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ESS {
     /// Value in watts.
     /// Positive values take power from grid.
@@ -19,6 +49,8 @@ pub enum ESS {
 
     /// Control feed-in from battery
     DisableFeedIn(bool),
+
+    Mode(),
 }
 
 impl VictronESS {

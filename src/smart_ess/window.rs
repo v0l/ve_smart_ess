@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::ops::{Add, Index};
+use std::ops::{Add, Deref, Index};
 use std::str::FromStr;
 use std::time::Duration;
 use chrono::{Datelike, DateTime, Timelike, Utc};
@@ -15,6 +15,16 @@ pub enum Weekday {
     Friday,
     Saturday,
     Sunday,
+}
+
+impl Weekday {
+    pub fn days_from(from: &Weekday, to: &Weekday) -> u8 {
+        let mut days = *to as i64 - *from as i64 % 7;
+        if days < 0 {
+            days += 7;
+        }
+        days as u8
+    }
 }
 
 impl From<chrono::Weekday> for Weekday {
@@ -48,30 +58,26 @@ pub struct RateWindow {
 }
 
 impl RateWindow {
-    pub fn next(&self) -> Option<DateTime<Utc>> {
-        self.next_from(Utc::now())
+    pub fn next(&self, from: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        Some(self.schedule(from).first()?.clone())
     }
 
-    pub fn next_from(&self, from: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    pub fn schedule(&self, from: DateTime<Utc>) -> Vec<DateTime<Utc>> {
         let mut days = self.days.clone();
         days.sort();
 
         let today: Weekday = from.weekday().into();
-        let from_time: RateTime = from.into();
-        let next_weekday = if days.contains(&today) && self.start >= from_time {
-            Some((&today))
-        } else {
-            let wrap = days.iter().filter(|d| d.lt(&&today));
-            days.iter().filter(|d| d.gt(&&today)).chain(wrap).next()
-        };
-        let mut days_from_today = *(next_weekday?) as i64 - today as i64 % 7;
-        if days_from_today < 0 {
-            days_from_today += 7;
-        }
+        let wrap = days.iter().filter(|d| d.lt(&&today));
 
-        Some(from.date()
-            .and_hms(self.start.hour as u32, self.start.minute as u32, 0)
-            + chrono::Duration::days(days_from_today))
+        days.iter()
+            .filter(|d| d >= &&today)
+            .chain(wrap)
+            .map(|wd| {
+                let days = Weekday::days_from(&today, &wd);
+                from.date()
+                    .and_hms(self.start.hour as u32, self.start.minute as u32, 0)
+                    + chrono::Duration::days(days as i64)
+            }).collect()
     }
 
     pub fn inside(&self, time: &RateTime) -> bool {
@@ -82,6 +88,8 @@ impl RateWindow {
     fn cross_day(&self) -> bool {
         self.end < self.start
     }
+
+    fn starts(&self) -> usize { self.days.len() }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -181,17 +189,17 @@ mod tests {
             days: vec![Weekday::Sunday, Weekday::Friday],
         };
 
-        let next = rate.next_from(a_monday);
+        let next = rate.next(a_monday);
         assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.unwrap());
 
-        let next = rate.next_from(a_saturday);
+        let next = rate.next(a_saturday);
         assert_eq!(Utc.ymd(2022, 04, 17).and_hms(9, 0, 0), next.unwrap());
 
-        let next = rate.next_from(a_friday);
+        let next = rate.next(a_friday);
         assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.unwrap());
 
-        let next = rate.next_from(a_sunday_inside);
-        assert_eq!(Utc.ymd(2022, 04, 29).and_hms(9, 0, 0), next.unwrap());
+        let next = rate.next(a_sunday_inside);
+        assert_eq!(Utc.ymd(2022, 04, 24).and_hms(9, 0, 0), next.unwrap());
     }
 
     #[test]
@@ -202,7 +210,7 @@ mod tests {
             days: vec![],
         };
 
-        let next = rate.next();
+        let next = rate.next(Utc::now());
         assert_eq!(None, next);
     }
 }

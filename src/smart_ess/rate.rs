@@ -56,14 +56,19 @@ pub enum ChargeMode {
 }
 
 impl Rate {
-    pub fn next_from(&self, from: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        let items :Vec<DateTime<Utc>> = self.windows.iter()
-            .map(|w| w.next_from(from))
+    pub fn next(&self, from: DateTime<Utc>) -> Vec<DateTime<Utc>> {
+        self.windows.iter()
+            .map(|w| w.next(from))
             .filter(|f| f.is_some())
             .map(|f| f.unwrap())
-            .collect();
+            .collect()
+    }
 
-        Some(items.first()?.clone())
+    pub fn schedule(&self, from: DateTime<Utc>) -> Vec<DateTime<Utc>> {
+        self.windows.iter()
+            .map(|w| w.schedule(from))
+            .flatten()
+            .collect()
     }
 }
 

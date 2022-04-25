@@ -1,12 +1,12 @@
 use crate::victron::client::VictronClient;
 use crate::victron::{Line, LineDetail, Side, VictronError};
 use std::net::SocketAddr;
-use std::ops::Div;
 
 pub struct VictronBus {
     client: VictronClient,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Mode {
     ChargerOnly = 1,
     InverterOnly = 2,
@@ -22,6 +22,80 @@ impl ToString for Mode {
             Mode::On => "On",
             Mode::Off => "Off",
         }.to_owned()
+    }
+}
+
+impl TryFrom<u8> for Mode {
+    type Error = VictronError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            1 => Mode::ChargerOnly,
+            2 => Mode::InverterOnly,
+            3 => Mode::On,
+            4 => Mode::Off,
+            e => return Err(VictronError(format!("Invalid mode {}!", e)))
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum State {
+    Off = 0,
+    LowPower = 1,
+    Fault = 2,
+    Bulk = 3,
+    Absorption = 4,
+    Float = 5,
+    Storage = 6,
+    Equalize = 7,
+    Passthrough = 8,
+    Inverting = 9,
+    PowerAssist = 10,
+    PowerSupply = 11,
+    BulkProtection = 252,
+}
+
+impl ToString for State {
+    fn to_string(&self) -> String {
+        match self {
+            State::Off => "Off",
+            State::LowPower => "Low Power",
+            State::Fault => "Fault",
+            State::Bulk => "Bulk",
+            State::Absorption => "Absorption",
+            State::Float => "Float",
+            State::Storage => "Storage",
+            State::Equalize => "Equalize",
+            State::Passthrough => "Passthrough",
+            State::Inverting => "Inverting",
+            State::PowerAssist => "Power Assist",
+            State::PowerSupply => "Power Supply",
+            State::BulkProtection => "Bulk Protection"
+        }.to_owned()
+    }
+}
+
+impl TryFrom<u8> for State {
+    type Error = VictronError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => State::Off,
+            1 => State::LowPower,
+            2 => State::Fault,
+            3 => State::Bulk,
+            4 => State::Absorption,
+            5 => State::Float,
+            6 => State::Storage,
+            7 => State::Equalize,
+            8 => State::Passthrough,
+            9 => State::Inverting,
+            10 => State::PowerAssist,
+            11 => State::PowerSupply,
+            252 => State::BulkProtection,
+            e => return Err(VictronError(format!("Invalid mode {}!", e)))
+        })
     }
 }
 
@@ -44,6 +118,7 @@ pub enum Register {
     PhaseCount,
     ActiveInput,
 
+    State,
     Mode,
     Alarm(Alarm),
 
@@ -83,6 +158,19 @@ pub enum AlarmState {
     Ok = 0,
     Warning = 1,
     Alarm = 2,
+}
+
+impl TryFrom<u8> for AlarmState {
+    type Error = VictronError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => AlarmState::Ok,
+            1 => AlarmState::Warning,
+            2 => AlarmState::Alarm,
+            e => return Err(VictronError(format!("Invalid alarm state {}!", e)))
+        })
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -144,15 +232,13 @@ impl VictronBus {
         })
     }
 
+    pub async fn get_state(&mut self) -> Result<State, VictronError> {
+        let s = self.get(Register::State).await?;
+        State::try_from(s as u8)
+    }
     pub async fn get_mode(&mut self) -> Result<Mode, VictronError> {
         let m = self.get(Register::Mode).await?;
-        Ok(match m {
-            1 => Mode::ChargerOnly,
-            2 => Mode::InverterOnly,
-            3 => Mode::On,
-            4 => Mode::Off,
-            e => return Err(VictronError(format!("Invalid mode {}!", e)))
-        })
+        Mode::try_from(m as u8)
     }
 
     pub async fn set_mode(&mut self, mode: Mode) -> Result<(), VictronError> {
@@ -198,12 +284,7 @@ impl VictronBus {
 
         for alarm in all_alarms.iter_mut() {
             let sv = self.client.read_u16(self.get_register(Register::Alarm(alarm.clone()))?).await?;
-            let state = match sv {
-                0 => AlarmState::Ok,
-                1 => AlarmState::Warning,
-                2 => AlarmState::Alarm,
-                e => return Err(VictronError(format!("Invalid alarm state {}!", e)))
-            };
+            let state = AlarmState::try_from(sv as u8)?;
 
             match alarm {
                 HighTemperature(mut _v) => _v = state,
@@ -249,6 +330,7 @@ impl VictronBus {
             PhaseCount => 28,
             ActiveInput => 29,
 
+            State => 31,
             Mode => 33,
             Alarm(a) => match a {
                 BusAlarm::HighTemperature(_) => 34,
