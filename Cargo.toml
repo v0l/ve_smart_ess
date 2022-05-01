@@ -1,5 +1,5 @@
 [package]
-name = "modbus_victron"
+name = "ve_smart_ess"
 version = "0.1.0"
 edition = "2021"
 
