@@ -75,7 +75,9 @@
           }
         }
       ],
-      "discharge": "Spread",
+      "discharge": {
+        "Capacity": 1.0
+      },
       "charge": {
         "mode": "Disabled",
         "unit_limit": 0

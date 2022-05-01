@@ -3,7 +3,7 @@ extern crate core;
 use std::thread::sleep;
 use std::time::Duration;
 use chrono::{Local, Utc};
-use crate::smart_ess::{Controller, ControllerState};
+use crate::smart_ess::{Controller, ControllerInputState};
 use crate::victron::ess::{VictronESS};
 use crate::victron::ve_bus::{VictronBus};
 use crate::victron::{Line, Side, ess, VictronError};
@@ -37,11 +37,8 @@ pub async fn main() -> Result<(), VictronError> {
         println!("OUT_L1 = {:?}", out1);
         println!("ESS = {:?} {:?} {:?}", set_point, disable_charger, disable_feed_in);
 
-        let desired_state = ctr.desired_state(Utc::now(), ControllerState {
-            disable_charge: false,
-            disable_feed_in: false,
-            grid_load: out1.power,
-            battery_load: 0.0,
+        let desired_state = ctr.desired_state(Utc::now(), ControllerInputState {
+            system_load: out1.power,
             soc: soc / 100.0,
             capacity: 4.0
         }).unwrap();
@@ -49,9 +46,8 @@ pub async fn main() -> Result<(), VictronError> {
 
 
         let target_set_point = (desired_state.grid_load as i16).max(50);
-        if set_point != ess::Register::PowerSetPoint(Line::L1, target_set_point) {
-            ess.set_param(ess::Register::PowerSetPoint(Line::L1, target_set_point)).await?;
-        }
+        ess.set_param(ess::Register::PowerSetPoint(Line::L1, target_set_point)).await?;
+
         if disable_feed_in != ess::Register::DisableFeedIn(desired_state.disable_feed_in) {
             ess.set_param(ess::Register::DisableFeedIn(desired_state.disable_feed_in)).await?;
         }
