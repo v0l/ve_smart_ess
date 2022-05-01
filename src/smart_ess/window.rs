@@ -1,10 +1,17 @@
+use chrono::{DateTime, Datelike, Timelike, Utc, Local};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::ops::{Add, Deref, Index};
 use std::str::FromStr;
-use std::time::Duration;
-use chrono::{Datelike, DateTime, Timelike, Utc};
-use chrono::format::Numeric::Day;
-use serde::{Serialize, Deserialize};
+
+pub const ALL_WEEKDAYS: [Weekday; 7] = [
+    Weekday::Monday,
+    Weekday::Tuesday,
+    Weekday::Wednesday,
+    Weekday::Thursday,
+    Weekday::Friday,
+    Weekday::Saturday,
+    Weekday::Sunday,
+];
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Weekday {
@@ -58,41 +65,73 @@ pub struct RateWindow {
 }
 
 impl RateWindow {
-    pub fn next(&self, from: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        Some(self.schedule(from).first()?.clone())
-    }
-
-    pub fn schedule(&self, from: DateTime<Utc>) -> Vec<DateTime<Utc>> {
+    pub fn schedule(&self, from: DateTime<Utc>) -> Vec<RateWindowAbsolute> {
         let mut days = self.days.clone();
         days.sort();
 
         let today: Weekday = from.weekday().into();
-        let wrap = days.iter().filter(|d| d.lt(&&today));
+        let wrap = days.iter().filter(|d| **d < today);
 
-        days.iter()
-            .filter(|d| d >= &&today)
+        let mut ret : Vec<RateWindowAbsolute> = days.iter()
+            .filter(|d| **d >= today)
             .chain(wrap)
             .map(|wd| {
                 let days = Weekday::days_from(&today, &wd);
-                from.date()
-                    .and_hms(self.start.hour as u32, self.start.minute as u32, 0)
-                    + chrono::Duration::days(days as i64)
-            }).collect()
+                let start_local =
+                    from.date().with_timezone(&Local)
+                        .and_hms(self.start.hour as u32, self.start.minute as u32, 0)
+                        + chrono::Duration::days(days as i64);
+                let start_utc = start_local.with_timezone(&Utc);
+                RateWindowAbsolute {
+                    start: start_utc,
+                    end: start_utc + chrono::Duration::minutes(self.period() as i64),
+                }
+            })
+            .filter(|d| d.start >= from || d.is_inside(from))
+            .collect();
+        ret.sort_by(|a, b| a.start.cmp(&b.start));
+        ret
     }
 
     pub fn inside(&self, time: &RateTime) -> bool {
-        self.start.minute_of_day() <= time.minute_of_day() &&
-            self.end.minute_of_day() >= time.minute_of_day()
+        self.start.minute_of_day() <= time.minute_of_day()
+            && self.end.minute_of_day() >= time.minute_of_day()
     }
 
     fn cross_day(&self) -> bool {
         self.end < self.start
     }
 
-    fn starts(&self) -> usize { self.days.len() }
+    fn starts(&self) -> usize {
+        self.days.len()
+    }
+
+    /// Number of minutes in this window
+    fn period(&self) -> i16 {
+        let end_m = self.end.minute_of_day() as i16;
+        let start_m = self.start.minute_of_day() as i16;
+        let v = end_m - start_m;
+        if v < 0 {
+            1440 + v
+        } else {
+            v
+        }
+    }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct RateWindowAbsolute {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
+}
+
+impl RateWindowAbsolute {
+    pub fn is_inside(&self, v: DateTime<Utc>) -> bool {
+        self.start <= v && v <= self.end
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RateTime {
     hour: u8,
     minute: u8,
@@ -104,13 +143,8 @@ impl RateTime {
             return Err(RateError("Invalid time range".to_owned()));
         }
 
-        Ok(RateTime {
-            hour,
-            minute,
-        })
+        Ok(RateTime { hour, minute })
     }
-
-    pub fn active_at(time: RateTime) {}
 
     pub fn minute_of_day(&self) -> u16 {
         (self.hour as u16 * 60) + self.minute as u16
@@ -128,7 +162,10 @@ impl FromStr for RateTime {
 
 impl From<DateTime<Utc>> for RateTime {
     fn from(dt: DateTime<Utc>) -> Self {
-        RateTime { hour: dt.hour() as u8, minute: dt.minute() as u8 }
+        RateTime {
+            hour: dt.hour() as u8,
+            minute: dt.minute() as u8,
+        }
     }
 }
 
@@ -154,12 +191,15 @@ impl Ord for RateTime {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
     use super::*;
+    use chrono::TimeZone;
 
     #[test]
     fn rate_time_from_str() {
-        let nine_am = RateTime { hour: 9, minute: 59 };
+        let nine_am = RateTime {
+            hour: 9,
+            minute: 59,
+        };
 
         let test_nine_am = RateTime::from_str("09:59").unwrap();
         assert_eq!(&nine_am, &test_nine_am);
@@ -189,17 +229,22 @@ mod tests {
             days: vec![Weekday::Sunday, Weekday::Friday],
         };
 
-        let next = rate.next(a_monday);
-        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.unwrap());
+        let sch = rate.schedule(a_monday);
+        let next = sch.first().unwrap();
+        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.start);
+        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(16, 59, 0), next.end);
 
-        let next = rate.next(a_saturday);
-        assert_eq!(Utc.ymd(2022, 04, 17).and_hms(9, 0, 0), next.unwrap());
+        let sch = rate.schedule(a_saturday);
+        let next = sch.first().unwrap();
+        assert_eq!(Utc.ymd(2022, 04, 17).and_hms(9, 0, 0), next.start);
 
-        let next = rate.next(a_friday);
-        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.unwrap());
+        let sch = rate.schedule(a_friday);
+        let next = sch.first().unwrap();
+        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.start);
 
-        let next = rate.next(a_sunday_inside);
-        assert_eq!(Utc.ymd(2022, 04, 24).and_hms(9, 0, 0), next.unwrap());
+        let sch = rate.schedule(a_sunday_inside);
+        let next = sch.first().unwrap();
+        assert_eq!(Utc.ymd(2022, 04, 24).and_hms(9, 0, 0), next.start);
     }
 
     #[test]
@@ -210,7 +255,31 @@ mod tests {
             days: vec![],
         };
 
-        let next = rate.next(Utc::now());
-        assert_eq!(None, next);
+        let sch = rate.schedule(Utc::now());
+        assert_eq!(None, sch.first());
+    }
+
+    #[test]
+    fn rate_period() {
+        let rate = RateWindow {
+            start: RateTime::from_str("00:00").unwrap(),
+            end: RateTime::from_str("00:01").unwrap(),
+            days: vec![],
+        };
+        assert_eq!(1, rate.period());
+
+        let rate = RateWindow {
+            start: RateTime::from_str("23:00").unwrap(),
+            end: RateTime::from_str("02:00").unwrap(),
+            days: vec![],
+        };
+        assert_eq!(180, rate.period());
+
+        let rate = RateWindow {
+            start: RateTime::from_str("00:00").unwrap(),
+            end: RateTime::from_str("23:59").unwrap(),
+            days: vec![],
+        };
+        assert_eq!(23 * 60 + 59, rate.period());
     }
 }

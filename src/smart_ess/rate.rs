@@ -1,8 +1,6 @@
-use std::cmp::Ordering;
-use std::ops::Index;
-use chrono::{Datelike, DateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
-use crate::smart_ess::window::RateWindow;
+use crate::smart_ess::window::{RateWindow, RateWindowAbsolute};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Rate {
@@ -22,10 +20,10 @@ pub struct Rate {
     pub charge: RateCharge,
 
     /// Number of units to be reserved for this rate until next charge
-    pub reserve: i16,
+    pub reserve: f32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum RateDischarge {
     /// Discharge disabled
     None,
@@ -37,7 +35,7 @@ pub enum RateDischarge {
     Spread,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RateCharge {
     /// Charger mode
     mode: ChargeMode,
@@ -46,7 +44,7 @@ pub struct RateCharge {
     unit_limit: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum ChargeMode {
     /// Charger is disabled
     Disabled,
@@ -56,24 +54,64 @@ pub enum ChargeMode {
 }
 
 impl Rate {
-    pub fn next(&self, from: DateTime<Utc>) -> Vec<DateTime<Utc>> {
-        self.windows.iter()
-            .map(|w| w.next(from))
-            .filter(|f| f.is_some())
-            .map(|f| f.unwrap())
-            .collect()
-    }
-
-    pub fn schedule(&self, from: DateTime<Utc>) -> Vec<DateTime<Utc>> {
-        self.windows.iter()
+    pub fn schedule(&self, from: DateTime<Utc>) -> Vec<RateWindowAbsolute> {
+        let mut ret : Vec<RateWindowAbsolute> = self.windows.iter()
             .map(|w| w.schedule(from))
             .flatten()
-            .collect()
+            .collect();
+        ret.sort_by(|a, b| a.start.cmp(&b.start));
+        ret
     }
 }
 
 impl RateCharge {
     pub fn charge_enabled(&self) -> bool {
         self.mode != ChargeMode::Disabled
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use chrono::TimeZone;
+    use crate::smart_ess::window::{ALL_WEEKDAYS, RateTime};
+    use super::*;
+
+    #[test]
+    fn next_from() {
+        let rate = Rate{
+            name: "test".to_owned(),
+            unit_cost: 0.2,
+            windows: vec![
+                RateWindow {
+                    start: RateTime::from_str("09:00").unwrap(),
+                    end: RateTime::from_str("9:59").unwrap(),
+                    days: ALL_WEEKDAYS.to_vec()
+                },
+                RateWindow {
+                    start: RateTime::from_str("11:00").unwrap(),
+                    end: RateTime::from_str("11:59").unwrap(),
+                    days: ALL_WEEKDAYS.to_vec()
+                }
+            ],
+            charge: RateCharge{
+                mode: ChargeMode::Capacity(1.0),
+                unit_limit: 0
+            },
+            discharge: RateDischarge::None,
+            reserve: 0.0
+        };
+
+        let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(8, 0, 0));
+        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(9, 0, 0), next[0].start);
+        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(11, 0, 0), next[1].start);
+
+        let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(9, 0, 0));
+        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(9, 0, 0), next[0].start);
+        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(11, 0, 0), next[1].start);
+
+        let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(10, 0, 0));
+        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(11, 0, 0), next[0].start);
+        assert_eq!(Utc.ymd(2022, 04, 19).and_hms(9, 0, 0), next[1].start);
     }
 }

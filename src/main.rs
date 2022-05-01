@@ -2,18 +2,18 @@ extern crate core;
 
 use std::thread::sleep;
 use std::time::Duration;
-use chrono::Utc;
-use crate::smart_ess::Controller;
-use crate::victron::ess::{ESS, VictronESS};
-use crate::victron::ve_bus::{Register, VictronBus};
-use crate::victron::{Line, Side, VictronError};
+use chrono::{Local, Utc};
+use crate::smart_ess::{Controller, ControllerState};
+use crate::victron::ess::{VictronESS};
+use crate::victron::ve_bus::{VictronBus};
+use crate::victron::{Line, Side, ess, VictronError};
 
 mod victron;
 mod smart_ess;
 
 const INVERTER: u8 = 227;
-const BATTERY: u8 = 225;
-const SYSTEM: u8 = 100;
+//const BATTERY: u8 = 225;
+//const SYSTEM: u8 = 100;
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn main() -> Result<(), VictronError> {
@@ -22,46 +22,43 @@ pub async fn main() -> Result<(), VictronError> {
 
     let ctr = Controller::load().map_err(|e| VictronError(e.0))?;
 
-    println!("{:?}", ctr);
+    loop {
+        let soc = vs.soc().await?;
+        let in1 = vs.get_line_info(Side::Input, Line::L1).await?;
+        let out1 = vs.get_line_info(Side::Output, Line::L1).await?;
 
-    let phases = vs.get(Register::PhaseCount).await?;
-    let active_input = vs.get_active_input().await?;
-    let mode = vs.get_mode().await?;
-    let state = vs.get_state().await?;
+        // ess
+        let set_point = ess.get_param(ess::Register::PowerSetPoint(Line::L1, 0)).await?;
+        let disable_charger = ess.get_param(ess::Register::DisableCharge(false)).await?;
+        let disable_feed_in = ess.get_param(ess::Register::DisableFeedIn(false)).await?;
 
-    let in1 = vs.get_line_info(Side::Input, Line::L1).await?;
-    let out1 = vs.get_line_info(Side::Output, Line::L1).await?;
+        println!("====================");
+        println!("IN_L1 = {:?}", in1);
+        println!("OUT_L1 = {:?}", out1);
+        println!("ESS = {:?} {:?} {:?}", set_point, disable_charger, disable_feed_in);
 
-    // ess
-    let set_point = ess.get_param(ESS::PowerSetPoint(Line::L1, 0)).await?;
-    let disable_charger = ess.get_param(ESS::DisableCharge(false)).await?;
-    let disable_feed_in = ess.get_param(ESS::DisableFeedIn(false)).await?;
+        let desired_state = ctr.desired_state(Utc::now(), ControllerState {
+            disable_charge: false,
+            disable_feed_in: false,
+            grid_load: out1.power,
+            battery_load: 0.0,
+            soc: soc / 100.0,
+            capacity: 4.0
+        }).unwrap();
+        println!("{:?}", desired_state);
 
-    let target_set_point = (out1.power / 2f32) as i16;
-    if set_point != ESS::PowerSetPoint(Line::L1, target_set_point) {
-        //ess.set_param(ESS::PowerSetPoint(Line::L1, target_set_point)).await?;
+
+        let target_set_point = (desired_state.grid_load as i16).max(50);
+        if set_point != ess::Register::PowerSetPoint(Line::L1, target_set_point) {
+            ess.set_param(ess::Register::PowerSetPoint(Line::L1, target_set_point)).await?;
+        }
+        if disable_feed_in != ess::Register::DisableFeedIn(desired_state.disable_feed_in) {
+            ess.set_param(ess::Register::DisableFeedIn(desired_state.disable_feed_in)).await?;
+        }
+        if disable_charger != ess::Register::DisableCharge(desired_state.disable_charge) {
+            ess.set_param(ess::Register::DisableCharge(desired_state.disable_charge)).await?;
+        }
+
+        sleep(Duration::from_secs(10))
     }
-    if disable_feed_in != ESS::DisableFeedIn(false) {
-        ess.set_param(ESS::DisableFeedIn(false)).await?;
-    }
-    if disable_charger != ESS::DisableCharge(false) {
-        ess.set_param(ESS::DisableCharge(false)).await?;
-    }
-
-    println!("=== SCHEDULE ===");
-    let sch = ctr.get_schedule(Utc::now());
-    for s in sch.iter() {
-        println!("{} @ {}", s.rate.name, s.start);
-    }
-
-    let next_charge = ctr.next_charge(Utc::now());
-
-    println!("=== SYSTEM ===\nPhases: \t{}\nActive Phase: \t{}\nMode: \t\t{}\nState: \t\t{}", phases, active_input.to_string(), mode.to_string(), state.to_string());
-
-    println!("IN_L1 = {:?}", in1);
-    println!("OUT_L1 = {:?}", out1);
-    println!("ESS = {:?} {:?} {:?}", set_point, disable_charger, disable_feed_in);
-    println!("Next Charge: {:?}", next_charge);
-
-    Ok(())
 }

@@ -6,7 +6,7 @@ pub struct VictronBus {
     client: VictronClient,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Mode {
     ChargerOnly = 1,
     InverterOnly = 2,
@@ -39,7 +39,7 @@ impl TryFrom<u8> for Mode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum State {
     Off = 0,
     LowPower = 1,
@@ -99,6 +99,7 @@ impl TryFrom<u8> for State {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum Register {
     InputVoltage(Line),
     InputCurrent(Line),
@@ -118,6 +119,7 @@ pub enum Register {
     PhaseCount,
     ActiveInput,
 
+    Soc(f32),
     State,
     Mode,
     Alarm(Alarm),
@@ -125,6 +127,7 @@ pub enum Register {
     ACInputIgnore(Line, bool),
 }
 
+#[derive(Debug, Copy, Clone)]
 pub enum ActiveInput {
     Line1,
     Line2,
@@ -153,7 +156,7 @@ impl TryInto<Line> for ActiveInput {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum AlarmState {
     Ok = 0,
     Warning = 1,
@@ -173,7 +176,7 @@ impl TryFrom<u8> for AlarmState {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Alarm {
     HighTemperature(AlarmState),
     LowBattery(AlarmState),
@@ -243,6 +246,11 @@ impl VictronBus {
 
     pub async fn set_mode(&mut self, mode: Mode) -> Result<(), VictronError> {
         self.client.write_u16(self.get_register(Register::Mode)?, mode as u16).await
+    }
+
+    pub async fn soc(&mut self) -> Result<f32, VictronError> {
+        let v = self.get(Register::Soc(0f32)).await?;
+        Ok(v as f32 / 10.0)
     }
 
     pub async fn get_active_input(&mut self) -> Result<ActiveInput, VictronError> {
@@ -330,6 +338,7 @@ impl VictronBus {
             PhaseCount => 28,
             ActiveInput => 29,
 
+            Soc(_) => 30,
             State => 31,
             Mode => 33,
             Alarm(a) => match a {
