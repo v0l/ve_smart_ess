@@ -37,10 +37,13 @@ pub async fn main() -> Result<(), VictronError> {
         println!("OUT_L1 = {:?}", out1);
         println!("ESS = {:?} {:?} {:?}", set_point, disable_charger, disable_feed_in);
 
+        const MIN_SOC : f32 = 10.0;
+
         let desired_state = ctr.desired_state(Utc::now(), ControllerInputState {
             system_load: out1.power,
-            soc: soc / 100.0,
-            capacity: 4.0
+            soc: ((soc / 100.0) - MIN_SOC).max(0.0),
+            capacity: 4.0,
+            voltage: 0.0
         }).unwrap();
         println!("{:?}", desired_state);
 

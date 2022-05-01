@@ -41,6 +41,9 @@ pub struct ControllerInputState {
 
     /// Battery capacity in kWh
     pub capacity: f32,
+
+    /// Battery voltage
+    pub voltage: f32,
 }
 
 #[derive(Debug, Clone)]
