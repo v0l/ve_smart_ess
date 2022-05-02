@@ -21,7 +21,8 @@ impl ToString for Mode {
             Mode::InverterOnly => "Inverter Only",
             Mode::On => "On",
             Mode::Off => "Off",
-        }.to_owned()
+        }
+        .to_owned()
     }
 }
 
@@ -34,7 +35,7 @@ impl TryFrom<u8> for Mode {
             2 => Mode::InverterOnly,
             3 => Mode::On,
             4 => Mode::Off,
-            e => return Err(VictronError(format!("Invalid mode {}!", e)))
+            e => return Err(VictronError(format!("Invalid mode {}!", e))),
         })
     }
 }
@@ -71,8 +72,9 @@ impl ToString for State {
             State::Inverting => "Inverting",
             State::PowerAssist => "Power Assist",
             State::PowerSupply => "Power Supply",
-            State::BulkProtection => "Bulk Protection"
-        }.to_owned()
+            State::BulkProtection => "Bulk Protection",
+        }
+        .to_owned()
     }
 }
 
@@ -94,7 +96,7 @@ impl TryFrom<u8> for State {
             10 => State::PowerAssist,
             11 => State::PowerSupply,
             252 => State::BulkProtection,
-            e => return Err(VictronError(format!("Invalid mode {}!", e)))
+            e => return Err(VictronError(format!("Invalid mode {}!", e))),
         })
     }
 }
@@ -139,8 +141,9 @@ impl ToString for ActiveInput {
         match self {
             ActiveInput::Line1 => "Line 1",
             ActiveInput::Line2 => "Line 2",
-            ActiveInput::Disconnected => "Disconnected"
-        }.to_owned()
+            ActiveInput::Disconnected => "Disconnected",
+        }
+        .to_owned()
     }
 }
 
@@ -151,7 +154,7 @@ impl TryInto<Line> for ActiveInput {
         Ok(match self {
             ActiveInput::Line1 => Line::L1,
             ActiveInput::Line2 => Line::L2,
-            _ => return Err(VictronError("No active input!".to_owned()))
+            _ => return Err(VictronError("No active input!".to_owned())),
         })
     }
 }
@@ -171,7 +174,7 @@ impl TryFrom<u8> for AlarmState {
             0 => AlarmState::Ok,
             1 => AlarmState::Warning,
             2 => AlarmState::Alarm,
-            e => return Err(VictronError(format!("Invalid alarm state {}!", e)))
+            e => return Err(VictronError(format!("Invalid alarm state {}!", e))),
         })
     }
 }
@@ -200,10 +203,14 @@ impl VictronBus {
         Ok(Self { client: cli })
     }
 
-    pub async fn get_line_info(&mut self, side: Side, line: Line) -> Result<LineDetail, VictronError> {
+    pub async fn get_line_info(
+        &mut self,
+        side: Side,
+        line: Line,
+    ) -> Result<LineDetail, VictronError> {
         match side {
             Side::Input => self.input_info(line).await,
-            Side::Output => self.output_info(line).await
+            Side::Output => self.output_info(line).await,
         }
     }
 
@@ -245,7 +252,9 @@ impl VictronBus {
     }
 
     pub async fn set_mode(&mut self, mode: Mode) -> Result<(), VictronError> {
-        self.client.write_u16(self.get_register(Register::Mode)?, mode as u16).await
+        self.client
+            .write_u16(self.get_register(Register::Mode)?, mode as u16)
+            .await
     }
 
     pub async fn soc(&mut self) -> Result<f32, VictronError> {
@@ -259,7 +268,7 @@ impl VictronBus {
             0 => ActiveInput::Line1,
             1 => ActiveInput::Line2,
             240 => ActiveInput::Disconnected,
-            e => return Err(VictronError(format!("Unknown active input {}!", e)))
+            e => return Err(VictronError(format!("Unknown active input {}!", e))),
         })
     }
 
@@ -289,9 +298,11 @@ impl VictronBus {
             GridLost(Ok),
         ];
 
-
         for alarm in all_alarms.iter_mut() {
-            let sv = self.client.read_u16(self.get_register(Register::Alarm(alarm.clone()))?).await?;
+            let sv = self
+                .client
+                .read_u16(self.get_register(Register::Alarm(alarm.clone()))?)
+                .await?;
             let state = AlarmState::try_from(sv as u8)?;
 
             match alarm {
@@ -357,8 +368,8 @@ impl VictronBus {
             ACInputIgnore(l, _) => match l {
                 Line::L1 => 69,
                 Line::L2 => 70,
-                Line::L3 => return Err(VictronError("No AC Input Ignore for Line 3!".to_owned()))
-            }
+                Line::L3 => return Err(VictronError("No AC Input Ignore for Line 3!".to_owned())),
+            },
         })
     }
 }

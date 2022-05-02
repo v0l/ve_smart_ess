@@ -1,6 +1,6 @@
-use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
 use crate::smart_ess::window::{RateWindow, RateWindowAbsolute};
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Rate {
@@ -55,7 +55,9 @@ pub enum ChargeMode {
 
 impl Rate {
     pub fn schedule(&self, from: DateTime<Utc>) -> Vec<RateWindowAbsolute> {
-        let mut ret : Vec<RateWindowAbsolute> = self.windows.iter()
+        let mut ret: Vec<RateWindowAbsolute> = self
+            .windows
+            .iter()
             .map(|w| w.schedule(from))
             .flatten()
             .collect();
@@ -72,34 +74,34 @@ impl RateCharge {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-    use chrono::TimeZone;
-    use crate::smart_ess::window::{ALL_WEEKDAYS, RateTime};
     use super::*;
+    use crate::smart_ess::window::{RateTime, ALL_WEEKDAYS};
+    use chrono::TimeZone;
+    use std::str::FromStr;
 
     #[test]
     fn next_from() {
-        let rate = Rate{
+        let rate = Rate {
             name: "test".to_owned(),
             unit_cost: 0.2,
             windows: vec![
                 RateWindow {
                     start: RateTime::from_str("09:00").unwrap(),
                     end: RateTime::from_str("9:59").unwrap(),
-                    days: ALL_WEEKDAYS.to_vec()
+                    days: ALL_WEEKDAYS.to_vec(),
                 },
                 RateWindow {
                     start: RateTime::from_str("11:00").unwrap(),
                     end: RateTime::from_str("11:59").unwrap(),
-                    days: ALL_WEEKDAYS.to_vec()
-                }
+                    days: ALL_WEEKDAYS.to_vec(),
+                },
             ],
-            charge: RateCharge{
+            charge: RateCharge {
                 mode: ChargeMode::Capacity(1.0),
-                unit_limit: 0
+                unit_limit: 0,
             },
             discharge: RateDischarge::None,
-            reserve: 0.0
+            reserve: 0.0,
         };
 
         let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(8, 0, 0));

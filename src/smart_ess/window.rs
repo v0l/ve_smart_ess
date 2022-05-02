@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Timelike, Utc, Local};
+use chrono::{DateTime, Datelike, Local, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::str::FromStr;
@@ -72,15 +72,17 @@ impl RateWindow {
         let today: Weekday = from.weekday().into();
         let wrap = days.iter().filter(|d| **d < today);
 
-        let mut ret : Vec<RateWindowAbsolute> = days.iter()
+        let mut ret: Vec<RateWindowAbsolute> = days
+            .iter()
             .filter(|d| **d >= today)
             .chain(wrap)
             .map(|wd| {
                 let days = Weekday::days_from(&today, &wd);
-                let start_local =
-                    from.date().with_timezone(&Local)
-                        .and_hms(self.start.hour as u32, self.start.minute as u32, 0)
-                        + chrono::Duration::days(days as i64);
+                let start_local = from.date().with_timezone(&Local).and_hms(
+                    self.start.hour as u32,
+                    self.start.minute as u32,
+                    0,
+                ) + chrono::Duration::days(days as i64);
                 let start_utc = start_local.with_timezone(&Utc);
                 RateWindowAbsolute {
                     start: start_utc,

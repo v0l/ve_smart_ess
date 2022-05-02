@@ -1,8 +1,8 @@
+use crate::victron::VictronError;
 use std::io::Error;
 use std::net::SocketAddr;
-use tokio_modbus::client::{Context, Reader, tcp, Writer};
+use tokio_modbus::client::{tcp, Context, Reader, Writer};
 use tokio_modbus::slave::{Slave, SlaveContext};
-use crate::victron::VictronError;
 
 pub(crate) struct VictronClient {
     client: Context,
@@ -36,7 +36,7 @@ impl VictronClient {
         Ok(match dbg!(self.read_u16(addr).await?) {
             0 => false,
             1 => true,
-            _ => return Err(VictronError("Unknown bool state!".to_owned()))
+            _ => return Err(VictronError("Unknown bool state!".to_owned())),
         })
     }
 
@@ -45,7 +45,10 @@ impl VictronClient {
     }
 
     pub async fn read_u16(&mut self, addr: u16) -> Result<u16, VictronError> {
-        let v = self.client.read_input_registers(addr, 1).await
+        let v = self
+            .client
+            .read_input_registers(addr, 1)
+            .await
             .map_err(|e| VictronError(e.to_string()))?;
         Ok(v[0] as u16)
     }

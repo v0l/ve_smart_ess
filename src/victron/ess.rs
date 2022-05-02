@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
-use crate::victron::client::{VictronClient};
+use crate::victron::client::VictronClient;
 use crate::victron::Line;
 use crate::VictronError;
+use std::net::SocketAddr;
 
 pub struct VictronESS {
     client: VictronClient,
@@ -22,7 +22,7 @@ impl TryFrom<u16> for Hub4Mode {
             1 => Hub4Mode::WithPhaseCompensation,
             2 => Hub4Mode::WithoutPhaseCompensation,
             3 => Hub4Mode::External,
-            e => return Err(VictronError(format!("Invalid Hub4 mode {}!", e)))
+            e => return Err(VictronError(format!("Invalid Hub4 mode {}!", e))),
         })
     }
 }
@@ -33,7 +33,8 @@ impl ToString for Hub4Mode {
             Hub4Mode::WithPhaseCompensation => "ESS with phase compensation",
             Hub4Mode::WithoutPhaseCompensation => "ESS without phase compensation",
             Hub4Mode::External => "Disabled / External Control",
-        }.to_owned()
+        }
+        .to_owned()
     }
 }
 
@@ -72,7 +73,7 @@ impl VictronESS {
             }
             Register::DisableFeedIn(_) => {
                 Register::DisableFeedIn(self.client.read_u16(addr).await? as u8 == 1)
-            },
+            }
             Register::Mode(_) => {
                 Register::Mode(Hub4Mode::try_from(self.client.read_u16(addr).await?)?)
             }
@@ -82,18 +83,14 @@ impl VictronESS {
     pub async fn set_param(&mut self, reg: Register) -> Result<(), VictronError> {
         let addr = self.map_register(&reg);
         Ok(match reg {
-            Register::PowerSetPoint(_, power) => {
-                self.client.write_i16(addr, power).await?
-            }
+            Register::PowerSetPoint(_, power) => self.client.write_i16(addr, power).await?,
             Register::DisableCharge(v) => {
                 self.client.write_u16(addr, if v { 100 } else { 0 }).await?
             }
             Register::DisableFeedIn(v) => {
                 self.client.write_u16(addr, if v { 100 } else { 0 }).await?
             }
-            Register::Mode(v) => {
-                self.client.write_u16(addr, v as u16).await?
-            }
+            Register::Mode(v) => self.client.write_u16(addr, v as u16).await?,
         })
     }
 
@@ -106,7 +103,7 @@ impl VictronESS {
             },
             Register::DisableCharge(_) => 38,
             Register::DisableFeedIn(_) => 39,
-            Register::Mode(_) => 2902
+            Register::Mode(_) => 2902,
         }
     }
 }

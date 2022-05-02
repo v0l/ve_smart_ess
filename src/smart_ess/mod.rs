@@ -62,6 +62,12 @@ pub struct ControllerOutputState {
 
     /// Reserve capacity for upcoming rates in kWh
     pub reserve_capacity: f32,
+
+    pub current_rate: Rate,
+
+    pub next_rate: Rate,
+
+    pub next_charge: Rate,
 }
 
 impl Controller {
@@ -135,13 +141,18 @@ impl Controller {
                 battery_load: 0.0,
                 using_capacity: 0.0,
                 reserve_capacity: 0.0,
+                current_rate: current_sch.rate.clone(),
+                next_rate: sch
+                    .get(1)
+                    .ok_or_else(|| ControllerError("No next rate found".to_owned()))?
+                    .rate
+                    .clone(),
+                next_charge: next_charge.rate.clone(),
             });
         } else {
             // we are discharging, use remaining capacity
-            let rates_before_charge: Vec<&Schedule> = sch
-                .iter()
-                .filter(|s| s.start < next_charge.start)
-                .collect();
+            let rates_before_charge: Vec<&Schedule> =
+                sch.iter().filter(|s| s.start < next_charge.start).collect();
             let reserve = rates_before_charge
                 .iter()
                 .fold(0f32, |acc, &s| acc + s.rate.reserve);
@@ -151,11 +162,11 @@ impl Controller {
 
             let battery_load = match current_sch.rate.discharge {
                 RateDischarge::Spread => {
-                    let hours = dbg!(time_until_charge.num_minutes() as f32 / 60.0);
+                    let hours = time_until_charge.num_minutes() as f32 / 60.0;
                     (remaining_capacity / hours) * 1000.0
                 }
                 RateDischarge::Capacity(v) => current_state.system_load * v,
-                _ => 0.0
+                _ => 0.0,
             };
 
             return Ok(ControllerOutputState {
@@ -165,6 +176,13 @@ impl Controller {
                 battery_load,
                 using_capacity: remaining_capacity,
                 reserve_capacity: reserve,
+                current_rate: current_sch.rate.clone(),
+                next_rate: sch
+                    .get(1)
+                    .ok_or_else(|| ControllerError("No next rate found".to_owned()))?
+                    .rate
+                    .clone(),
+                next_charge: next_charge.rate.clone(),
             });
         }
     }
