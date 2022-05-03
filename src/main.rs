@@ -55,7 +55,7 @@ pub async fn main() -> Result<(), VictronError> {
                 },
             )
             .unwrap();
-        println!("{:?}", desired_state);
+        println!("{}", desired_state);
 
         let target_set_point = (desired_state.grid_load as i16).max(50);
         ess.set_param(ess::Register::PowerSetPoint(Line::L1, target_set_point))

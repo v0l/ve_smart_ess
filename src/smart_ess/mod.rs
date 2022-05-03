@@ -1,12 +1,11 @@
+use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::{ErrorKind, Read};
-use std::ops::Index;
+use std::io::Read;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::smart_ess::rate::{Rate, RateDischarge};
-use crate::victron::{ess, ve_bus};
 
 pub mod rate;
 pub mod window;
@@ -63,11 +62,27 @@ pub struct ControllerOutputState {
     /// Reserve capacity for upcoming rates in kWh
     pub reserve_capacity: f32,
 
-    pub current_rate: Rate,
+    pub current_rate: Schedule,
 
-    pub next_rate: Rate,
+    pub next_rate: Schedule,
 
-    pub next_charge: Rate,
+    pub next_charge: Schedule,
+}
+
+impl Display for ControllerOutputState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Grid Load: {} W\nBattery Load: {} W\nUsing: {} kWh\nReserve: {} kWh\nCurrent Rate: {} @ {}\nNext Rate: {} @ {}\nNext Charge: {} @ {}",
+               self.grid_load,
+               self.battery_load,
+               self.using_capacity,
+               self.reserve_capacity,
+               self.current_rate.rate.name,
+               self.current_rate.start,
+               self.next_rate.rate.name,
+               self.next_rate.start,
+               self.next_charge.rate.name,
+               self.next_charge.start)
+    }
 }
 
 impl Controller {
@@ -141,13 +156,12 @@ impl Controller {
                 battery_load: 0.0,
                 using_capacity: 0.0,
                 reserve_capacity: 0.0,
-                current_rate: current_sch.rate.clone(),
+                current_rate: current_sch.clone(),
                 next_rate: sch
                     .get(1)
                     .ok_or_else(|| ControllerError("No next rate found".to_owned()))?
-                    .rate
                     .clone(),
-                next_charge: next_charge.rate.clone(),
+                next_charge: next_charge.clone(),
             });
         } else {
             // we are discharging, use remaining capacity
@@ -176,13 +190,12 @@ impl Controller {
                 battery_load,
                 using_capacity: remaining_capacity,
                 reserve_capacity: reserve,
-                current_rate: current_sch.rate.clone(),
+                current_rate: current_sch.clone(),
                 next_rate: sch
                     .get(1)
                     .ok_or_else(|| ControllerError("No next rate found".to_owned()))?
-                    .rate
                     .clone(),
-                next_charge: next_charge.rate.clone(),
+                next_charge: next_charge.clone(),
             });
         }
     }
@@ -190,59 +203,53 @@ impl Controller {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-    use chrono::{Local, TimeZone};
     use super::*;
     use crate::smart_ess::rate::{ChargeMode, Rate, RateCharge};
-    use crate::smart_ess::window::{ALL_WEEKDAYS, RateTime, RateWindow};
+    use crate::smart_ess::window::{RateTime, RateWindow, ALL_WEEKDAYS};
+    use chrono::{Local, TimeZone};
+    use std::str::FromStr;
 
     #[test]
     fn schedule() {
         let controller = Controller {
             rates: vec![
-                Rate{
+                Rate {
                     name: "Day".to_owned(),
                     unit_cost: 0.0,
-                    windows: vec![
-                        RateWindow {
-                            start: RateTime::from_str("09:00").unwrap(),
-                            end: RateTime::from_str("22:59").unwrap(),
-                            days: ALL_WEEKDAYS.into(),
-                        }
-                    ],
+                    windows: vec![RateWindow {
+                        start: RateTime::from_str("09:00").unwrap(),
+                        end: RateTime::from_str("22:59").unwrap(),
+                        days: ALL_WEEKDAYS.into(),
+                    }],
                     discharge: RateDischarge::Spread,
                     charge: RateCharge {
                         mode: ChargeMode::Disabled,
-                        unit_limit: 0
+                        unit_limit: 0,
                     },
-                    reserve: 0.0
+                    reserve: 0.0,
                 },
-                Rate{
+                Rate {
                     name: "Night".to_owned(),
                     unit_cost: 0.0,
-                    windows: vec![
-                        RateWindow {
-                            start: RateTime::from_str("23:00").unwrap(),
-                            end: RateTime::from_str("08:59").unwrap(),
-                            days: ALL_WEEKDAYS.into(),
-                        }
-                    ],
+                    windows: vec![RateWindow {
+                        start: RateTime::from_str("23:00").unwrap(),
+                        end: RateTime::from_str("08:59").unwrap(),
+                        days: ALL_WEEKDAYS.into(),
+                    }],
                     discharge: RateDischarge::None,
                     charge: RateCharge {
                         mode: ChargeMode::Capacity(1.0),
-                        unit_limit: 0
+                        unit_limit: 0,
                     },
-                    reserve: 0.0
-                }
-            ]
+                    reserve: 0.0,
+                },
+            ],
         };
 
         let from = Local.ymd(2022, 05, 03).and_hms(2, 0, 0).with_timezone(&Utc);
         let sch = controller.get_schedule(from);
         let next = sch.get(0).unwrap();
 
-
-        assert_eq!(next.start, Local.ymd(2022, 05, 02).and_hms(23, 0, 0))
-
+        assert_eq!(next.start, Local.ymd(2022, 05, 02).and_hms(23, 0, 0));
     }
 }
