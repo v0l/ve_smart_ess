@@ -87,7 +87,7 @@ impl RateWindow {
                     self.start.minute as u32,
                     0,
                 ) + Duration::days(days as i64);
-                let start_utc = dbg!(start_local).with_timezone(&Utc);
+                let start_utc = start_local.with_timezone(&Utc);
                 RateWindowAbsolute {
                     start: start_utc,
                     end: start_utc + Duration::minutes(self.period() as i64),
