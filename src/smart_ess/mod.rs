@@ -187,3 +187,62 @@ impl Controller {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+    use chrono::{Local, TimeZone};
+    use super::*;
+    use crate::smart_ess::rate::{ChargeMode, Rate, RateCharge};
+    use crate::smart_ess::window::{ALL_WEEKDAYS, RateTime, RateWindow};
+
+    #[test]
+    fn schedule() {
+        let controller = Controller {
+            rates: vec![
+                Rate{
+                    name: "Day".to_owned(),
+                    unit_cost: 0.0,
+                    windows: vec![
+                        RateWindow {
+                            start: RateTime::from_str("09:00").unwrap(),
+                            end: RateTime::from_str("22:59").unwrap(),
+                            days: ALL_WEEKDAYS.into(),
+                        }
+                    ],
+                    discharge: RateDischarge::Spread,
+                    charge: RateCharge {
+                        mode: ChargeMode::Disabled,
+                        unit_limit: 0
+                    },
+                    reserve: 0.0
+                },
+                Rate{
+                    name: "Night".to_owned(),
+                    unit_cost: 0.0,
+                    windows: vec![
+                        RateWindow {
+                            start: RateTime::from_str("23:00").unwrap(),
+                            end: RateTime::from_str("08:59").unwrap(),
+                            days: ALL_WEEKDAYS.into(),
+                        }
+                    ],
+                    discharge: RateDischarge::None,
+                    charge: RateCharge {
+                        mode: ChargeMode::Capacity(1.0),
+                        unit_limit: 0
+                    },
+                    reserve: 0.0
+                }
+            ]
+        };
+
+        let from = Local.ymd(2022, 05, 03).and_hms(2, 0, 0).with_timezone(&Utc);
+        let sch = controller.get_schedule(from);
+        let next = sch.get(0).unwrap();
+
+
+        assert_eq!(next.start, Local.ymd(2022, 05, 02).and_hms(23, 0, 0))
+
+    }
+}

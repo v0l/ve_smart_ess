@@ -38,10 +38,10 @@ pub enum RateDischarge {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub struct RateCharge {
     /// Charger mode
-    mode: ChargeMode,
+    pub mode: ChargeMode,
 
     /// Limit number of units that can be consumed by the charger in this rate.
-    unit_limit: u16,
+    pub unit_limit: u16,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
@@ -76,7 +76,7 @@ impl RateCharge {
 mod tests {
     use super::*;
     use crate::smart_ess::window::{RateTime, ALL_WEEKDAYS};
-    use chrono::TimeZone;
+    use chrono::{Local, TimeZone};
     use std::str::FromStr;
 
     #[test]
@@ -104,16 +104,16 @@ mod tests {
             reserve: 0.0,
         };
 
-        let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(8, 0, 0));
-        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(9, 0, 0), next[0].start);
-        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(11, 0, 0), next[1].start);
+        let next = rate.schedule(Local.ymd(2022, 04, 18).and_hms(8, 0, 0).with_timezone(&Utc));
+        assert_eq!(Local.ymd(2022, 04, 18).and_hms(9, 0, 0), next[0].start);
+        assert_eq!(Local.ymd(2022, 04, 18).and_hms(11, 0, 0), next[1].start);
 
-        let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(9, 0, 0));
-        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(9, 0, 0), next[0].start);
-        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(11, 0, 0), next[1].start);
+        let next = rate.schedule(Local.ymd(2022, 04, 18).and_hms(9, 0, 0).with_timezone(&Utc));
+        assert_eq!(Local.ymd(2022, 04, 18).and_hms(9, 0, 0), next[0].start);
+        assert_eq!(Local.ymd(2022, 04, 18).and_hms(11, 0, 0), next[1].start);
 
         let next = rate.schedule(Utc.ymd(2022, 04, 18).and_hms(10, 0, 0));
-        assert_eq!(Utc.ymd(2022, 04, 18).and_hms(11, 0, 0), next[0].start);
-        assert_eq!(Utc.ymd(2022, 04, 19).and_hms(9, 0, 0), next[1].start);
+        assert_eq!(Local.ymd(2022, 04, 18).and_hms(11, 0, 0), next[0].start);
+        assert_eq!(Local.ymd(2022, 04, 19).and_hms(9, 0, 0), next[1].start);
     }
 }

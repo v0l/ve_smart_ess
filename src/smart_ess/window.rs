@@ -1,8 +1,10 @@
-use chrono::{DateTime, Datelike, Local, Timelike, Utc};
+use chrono::{DateTime, Datelike, Local, Timelike, Utc, Duration};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+use std::ops::{Sub};
 use std::str::FromStr;
 
+#[cfg(test)]
 pub const ALL_WEEKDAYS: [Weekday; 7] = [
     Weekday::Monday,
     Weekday::Tuesday,
@@ -40,7 +42,7 @@ impl From<chrono::Weekday> for Weekday {
             chrono::Weekday::Mon => Weekday::Monday,
             chrono::Weekday::Tue => Weekday::Tuesday,
             chrono::Weekday::Wed => Weekday::Wednesday,
-            chrono::Weekday::Thu => Weekday::Tuesday,
+            chrono::Weekday::Thu => Weekday::Thursday,
             chrono::Weekday::Fri => Weekday::Friday,
             chrono::Weekday::Sat => Weekday::Saturday,
             chrono::Weekday::Sun => Weekday::Sunday,
@@ -69,43 +71,32 @@ impl RateWindow {
         let mut days = self.days.clone();
         days.sort();
 
-        let today: Weekday = from.weekday().into();
-        let wrap = days.iter().filter(|d| **d < today);
+        // we pick the day before `from` to catch rates which cross days
+        let from_sch = from.sub(Duration::days(1));
+        let from_weekday: Weekday = from_sch.weekday().into();
+        let wrap = days.iter().filter(|d| **d < from_weekday);
 
         let mut ret: Vec<RateWindowAbsolute> = days
             .iter()
-            .filter(|d| **d >= today)
+            .filter(|d| **d >= from_weekday)
             .chain(wrap)
             .map(|wd| {
-                let days = Weekday::days_from(&today, &wd);
-                let start_local = from.date().with_timezone(&Local).and_hms(
+                let days = Weekday::days_from(&from_weekday, &wd);
+                let start_local = from_sch.date().with_timezone(&Local).and_hms(
                     self.start.hour as u32,
                     self.start.minute as u32,
                     0,
-                ) + chrono::Duration::days(days as i64);
-                let start_utc = start_local.with_timezone(&Utc);
+                ) + Duration::days(days as i64);
+                let start_utc = dbg!(start_local).with_timezone(&Utc);
                 RateWindowAbsolute {
                     start: start_utc,
-                    end: start_utc + chrono::Duration::minutes(self.period() as i64),
+                    end: start_utc + Duration::minutes(self.period() as i64),
                 }
             })
             .filter(|d| d.start >= from || d.is_inside(from))
             .collect();
         ret.sort_by(|a, b| a.start.cmp(&b.start));
         ret
-    }
-
-    pub fn inside(&self, time: &RateTime) -> bool {
-        self.start.minute_of_day() <= time.minute_of_day()
-            && self.end.minute_of_day() >= time.minute_of_day()
-    }
-
-    fn cross_day(&self) -> bool {
-        self.end < self.start
-    }
-
-    fn starts(&self) -> usize {
-        self.days.len()
     }
 
     /// Number of minutes in this window
@@ -220,10 +211,10 @@ mod tests {
 
     #[test]
     fn rate_next_from() {
-        let a_monday = Utc.ymd(2022, 04, 18).and_hms(8, 0, 0);
-        let a_saturday = Utc.ymd(2022, 04, 16).and_hms(8, 0, 0);
-        let a_friday = Utc.ymd(2022, 04, 22).and_hms(8, 59, 59);
-        let a_sunday_inside = Utc.ymd(2022, 04, 24).and_hms(16, 0, 0);
+        let a_monday = Local.ymd(2022, 04, 18).and_hms(8, 0, 0);
+        let a_saturday = Local.ymd(2022, 04, 16).and_hms(8, 0, 0);
+        let a_friday = Local.ymd(2022, 04, 22).and_hms(8, 59, 59);
+        let a_sunday_inside = Local.ymd(2022, 04, 24).and_hms(16, 0, 0);
 
         let rate = RateWindow {
             start: RateTime::from_str("09:00").unwrap(),
@@ -231,22 +222,22 @@ mod tests {
             days: vec![Weekday::Sunday, Weekday::Friday],
         };
 
-        let sch = rate.schedule(a_monday);
+        let sch = rate.schedule(a_monday.with_timezone(&Utc));
         let next = sch.first().unwrap();
-        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.start);
-        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(16, 59, 0), next.end);
+        assert_eq!(Local.ymd(2022, 04, 22).and_hms(9, 0, 0), next.start);
+        assert_eq!(Local.ymd(2022, 04, 22).and_hms(16, 59, 0), next.end);
 
-        let sch = rate.schedule(a_saturday);
+        let sch = rate.schedule(a_saturday.with_timezone(&Utc));
         let next = sch.first().unwrap();
-        assert_eq!(Utc.ymd(2022, 04, 17).and_hms(9, 0, 0), next.start);
+        assert_eq!(Local.ymd(2022, 04, 17).and_hms(9, 0, 0), next.start);
 
-        let sch = rate.schedule(a_friday);
+        let sch = rate.schedule(a_friday.with_timezone(&Utc));
         let next = sch.first().unwrap();
-        assert_eq!(Utc.ymd(2022, 04, 22).and_hms(9, 0, 0), next.start);
+        assert_eq!(Local.ymd(2022, 04, 22).and_hms(9, 0, 0), next.start, "same day before schedule");
 
-        let sch = rate.schedule(a_sunday_inside);
+        let sch = rate.schedule(a_sunday_inside.with_timezone(&Utc));
         let next = sch.first().unwrap();
-        assert_eq!(Utc.ymd(2022, 04, 24).and_hms(9, 0, 0), next.start);
+        assert_eq!(Local.ymd(2022, 04, 24).and_hms(9, 0, 0), next.start);
     }
 
     #[test]
@@ -283,5 +274,29 @@ mod tests {
             days: vec![],
         };
         assert_eq!(23 * 60 + 59, rate.period());
+    }
+
+    #[test]
+    fn rate_cross() {
+        let rate = RateWindow {
+            start: RateTime::from_str("23:00").unwrap(),
+            end: RateTime::from_str("08:59").unwrap(),
+            days: ALL_WEEKDAYS.into(),
+        };
+
+        let from = Local.ymd(2022, 05, 03).and_hms(2, 0, 0).with_timezone(&Utc);
+        let sch = rate.schedule(from);
+        let next = sch.first().unwrap();
+
+        assert_eq!(next.start, Local.ymd(2022, 05, 02).and_hms(23, 0, 0));
+    }
+
+    #[test]
+    fn weekday_days_from() {
+        assert_eq!(Weekday::days_from(&Weekday::Monday, &Weekday::Tuesday), 1);
+        assert_eq!(Weekday::days_from(&Weekday::Sunday, &Weekday::Monday), 1);
+        assert_eq!(Weekday::days_from(&Weekday::Monday, &Weekday::Sunday), 6);
+        assert_eq!(Weekday::days_from(&Weekday::Wednesday, &Weekday::Tuesday), 6);
+        assert_eq!(Weekday::days_from(&Weekday::Sunday, &Weekday::Sunday), 0);
     }
 }
