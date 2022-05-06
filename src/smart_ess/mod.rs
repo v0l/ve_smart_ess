@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::smart_ess::rate::{Rate, RateDischarge};
+use crate::smart_ess::window::RateWindowAbsolute;
 
 pub mod rate;
 pub mod window;
@@ -21,13 +22,17 @@ impl<TStr: ToString> From<TStr> for ControllerError {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Controller {
+    /// Rate tariffs
     rates: Vec<Rate>,
+
+    /// Depth of Discharge
+    dod: f32,
 }
 
 #[derive(Debug, Clone)]
 pub struct Schedule {
     pub rate: Rate,
-    pub start: DateTime<Utc>,
+    pub window: RateWindowAbsolute,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +54,7 @@ pub struct ControllerInputState {
 pub struct ControllerOutputState {
     pub disable_charge: bool,
     pub disable_feed_in: bool,
+    pub soc: f32,
 
     /// Grid load in watts
     pub grid_load: f32,
@@ -71,17 +77,19 @@ pub struct ControllerOutputState {
 
 impl Display for ControllerOutputState {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Grid Load: {} W\nBattery Load: {} W\nUsing: {} kWh\nReserve: {} kWh\nCurrent Rate: {} @ {}\nNext Rate: {} @ {}\nNext Charge: {} @ {}",
+        write!(f, "Grid Load: {} W\nBattery Load: {} W\nSoC: {}\nUsing: {} kWh\nReserve: {} kWh\nCurrent Rate: {} @ {}\nNext Rate: {} @ {}\nNext Charge: {} @ {}\nTime To Charge: {} min",
                self.grid_load,
                self.battery_load,
+               self.soc,
                self.using_capacity,
                self.reserve_capacity,
                self.current_rate.rate.name,
-               self.current_rate.start,
+               self.current_rate.window.start,
                self.next_rate.rate.name,
-               self.next_rate.start,
+               self.next_rate.window.start,
                self.next_charge.rate.name,
-               self.next_charge.start)
+               self.next_charge.window.start,
+               (self.next_charge.window.start - Utc::now()).num_minutes())
     }
 }
 
@@ -120,14 +128,14 @@ impl Controller {
                 e.1.iter()
                     .map(|f| Schedule {
                         rate: e.0.clone(),
-                        start: f.start.clone(),
+                        window: f.clone(),
                     })
                     .collect::<Vec<Schedule>>()
             })
             .flatten()
             .collect();
 
-        sch.sort_by(|a, b| a.start.cmp(&b.start));
+        sch.sort_by(|a, b| a.window.start.cmp(&b.window.start));
         sch
     }
 
@@ -152,6 +160,7 @@ impl Controller {
             return Ok(ControllerOutputState {
                 disable_charge: false,
                 disable_feed_in: true,
+                soc: current_state.soc,
                 grid_load: 32_000.0,
                 battery_load: 0.0,
                 using_capacity: 0.0,
@@ -165,13 +174,16 @@ impl Controller {
             });
         } else {
             // we are discharging, use remaining capacity
-            let rates_before_charge: Vec<&Schedule> =
-                sch.iter().filter(|s| s.start < next_charge.start).collect();
+            let rates_before_charge: Vec<&Schedule> = sch
+                .iter()
+                .filter(|s| s.window.start < next_charge.window.start && !s.window.is_inside(from))
+                .collect();
             let reserve = rates_before_charge
                 .iter()
                 .fold(0f32, |acc, &s| acc + s.rate.reserve);
-            let time_until_charge = next_charge.start - from;
-            let kwh_capacity = current_state.capacity * current_state.soc;
+            let time_until_charge = next_charge.window.start - from;
+            let soc = (current_state.soc - (1.0 - self.dod)).max(0.0);
+            let kwh_capacity = current_state.capacity * soc;
             let remaining_capacity = (kwh_capacity - reserve).max(0.0);
 
             let battery_load = match current_sch.rate.discharge {
@@ -181,11 +193,13 @@ impl Controller {
                 }
                 RateDischarge::Capacity(v) => current_state.system_load * v,
                 _ => 0.0,
-            };
+            }.max(0.0);
 
+            let disable_feed_in = remaining_capacity == 0.0 || battery_load == 0.0;
             return Ok(ControllerOutputState {
                 disable_charge: true,
-                disable_feed_in: if battery_load == 0.0 { true } else { false },
+                disable_feed_in,
+                soc,
                 grid_load: (current_state.system_load - battery_load).max(0.0),
                 battery_load,
                 using_capacity: remaining_capacity,
@@ -209,19 +223,34 @@ mod tests {
     use chrono::{Local, TimeZone};
     use std::str::FromStr;
 
-    #[test]
-    fn schedule() {
-        let controller = Controller {
+    fn get_controller() -> Controller {
+        Controller {
+            dod: 0.9,
             rates: vec![
                 Rate {
                     name: "Day".to_owned(),
                     unit_cost: 0.0,
                     windows: vec![RateWindow {
                         start: RateTime::from_str("09:00").unwrap(),
-                        end: RateTime::from_str("22:59").unwrap(),
+                        end: RateTime::from_str("16:59").unwrap(),
                         days: ALL_WEEKDAYS.into(),
                     }],
                     discharge: RateDischarge::Spread,
+                    charge: RateCharge {
+                        mode: ChargeMode::Disabled,
+                        unit_limit: 0,
+                    },
+                    reserve: 0.0,
+                },
+                Rate {
+                    name: "Peak".to_owned(),
+                    unit_cost: 0.0,
+                    windows: vec![RateWindow {
+                        start: RateTime::from_str("17:00").unwrap(),
+                        end: RateTime::from_str("18:59").unwrap(),
+                        days: ALL_WEEKDAYS.into(),
+                    }],
+                    discharge: RateDischarge::Capacity(1.0),
                     charge: RateCharge {
                         mode: ChargeMode::Disabled,
                         unit_limit: 0,
@@ -244,12 +273,64 @@ mod tests {
                     reserve: 0.0,
                 },
             ],
-        };
+        }
+    }
 
+    #[test]
+    fn schedule() {
+        let controller = get_controller();
         let from = Local.ymd(2022, 05, 03).and_hms(2, 0, 0).with_timezone(&Utc);
         let sch = controller.get_schedule(from);
         let next = sch.get(0).unwrap();
 
-        assert_eq!(next.start, Local.ymd(2022, 05, 02).and_hms(23, 0, 0));
+        assert_eq!(next.window.start, Local.ymd(2022, 05, 02).and_hms(23, 0, 0));
+    }
+
+    #[test]
+    fn min_soc() {
+        let controller = get_controller();
+        let from = Local
+            .ymd(2022, 05, 03)
+            .and_hms(17, 30, 0)
+            .with_timezone(&Utc);
+
+        let state_at_dod = controller
+            .desired_state(
+                from,
+                ControllerInputState {
+                    system_load: 1000.0,
+                    soc: 1.0 - controller.dod,
+                    capacity: 4.0,
+                    voltage: 0.0,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            state_at_dod.current_rate.rate.discharge,
+            RateDischarge::Capacity(1.0),
+            "Is peak discharge"
+        );
+        assert_eq!(
+            state_at_dod.disable_feed_in, true,
+            "Disable feed-in when at min state of charge {:?}", state_at_dod
+        );
+
+        let state_above_dod = controller
+            .desired_state(
+                from,
+                ControllerInputState {
+                    system_load: 1000.0,
+                    soc: 1.1 - controller.dod,
+                    capacity: 4.0,
+                    voltage: 0.0,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            state_above_dod.disable_feed_in, false,
+            "Above DoD {:?}", state_above_dod
+        );
     }
 }

@@ -23,7 +23,7 @@ pub struct Rate {
     pub reserve: f32,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
 pub enum RateDischarge {
     /// Discharge disabled
     None,
