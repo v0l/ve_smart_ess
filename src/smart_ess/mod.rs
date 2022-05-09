@@ -5,7 +5,7 @@ use std::io::Read;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::smart_ess::rate::{Rate, RateDischarge};
+use crate::smart_ess::rate::{DischargeMode, Rate, RateDischarge};
 use crate::smart_ess::window::RateWindowAbsolute;
 
 pub mod rate;
@@ -186,14 +186,14 @@ impl Controller {
             let kwh_capacity = current_state.capacity * soc;
             let remaining_capacity = (kwh_capacity - reserve).max(0.0);
 
-            let battery_load = match current_sch.rate.discharge {
-                RateDischarge::Spread => {
+            let battery_load = match current_sch.rate.discharge.mode {
+                DischargeMode::Spread => {
                     let hours = time_until_charge.num_minutes() as f32 / 60.0;
                     (remaining_capacity / hours) * 1000.0
                 }
-                RateDischarge::Capacity(v) => current_state.system_load * v,
+                DischargeMode::Capacity(v) => current_state.system_load * v,
                 _ => 0.0,
-            }.max(0.0);
+            }.min(current_sch.rate.discharge.max_power).max(0.0);
 
             let disable_feed_in = remaining_capacity == 0.0 || battery_load == 0.0;
             return Ok(ControllerOutputState {
@@ -235,7 +235,10 @@ mod tests {
                         end: RateTime::from_str("16:59").unwrap(),
                         days: ALL_WEEKDAYS.into(),
                     }],
-                    discharge: RateDischarge::Spread,
+                    discharge: RateDischarge {
+                        mode: DischargeMode::Spread,
+                        max_power: 1000.0,
+                    },
                     charge: RateCharge {
                         mode: ChargeMode::Disabled,
                         unit_limit: 0,
@@ -250,7 +253,10 @@ mod tests {
                         end: RateTime::from_str("18:59").unwrap(),
                         days: ALL_WEEKDAYS.into(),
                     }],
-                    discharge: RateDischarge::Capacity(1.0),
+                    discharge: RateDischarge {
+                        mode: DischargeMode::Capacity(1.0),
+                        max_power: 100.0,
+                    },
                     charge: RateCharge {
                         mode: ChargeMode::Disabled,
                         unit_limit: 0,
@@ -265,7 +271,10 @@ mod tests {
                         end: RateTime::from_str("08:59").unwrap(),
                         days: ALL_WEEKDAYS.into(),
                     }],
-                    discharge: RateDischarge::None,
+                    discharge: RateDischarge {
+                        mode: DischargeMode::None,
+                        max_power: 100.0,
+                    },
                     charge: RateCharge {
                         mode: ChargeMode::Capacity(1.0),
                         unit_limit: 0,
@@ -307,8 +316,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            state_at_dod.current_rate.rate.discharge,
-            RateDischarge::Capacity(1.0),
+            state_at_dod.current_rate.rate.discharge.mode,
+            DischargeMode::Capacity(1.0),
             "Is peak discharge"
         );
         assert_eq!(

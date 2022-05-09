@@ -24,7 +24,15 @@ pub struct Rate {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
-pub enum RateDischarge {
+pub struct RateDischarge {
+    pub mode: DischargeMode,
+
+    /// Max battery discharge power
+    pub max_power: f32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+pub enum DischargeMode {
     /// Discharge disabled
     None,
 
@@ -100,7 +108,10 @@ mod tests {
                 mode: ChargeMode::Capacity(1.0),
                 unit_limit: 0,
             },
-            discharge: RateDischarge::None,
+            discharge: RateDischarge {
+                mode: DischargeMode::None,
+                max_power: 0.0
+            },
             reserve: 0.0,
         };
 

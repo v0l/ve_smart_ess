@@ -1,5 +1,5 @@
 {
-  "dod": 0.9,
+  "dod": 0.8,
   "rates": [
     {
       "name": "Day",
@@ -28,7 +28,10 @@
           }
         }
       ],
-      "discharge": "Spread",
+      "discharge": {
+        "mode": "Spread",
+        "max_power": 2500.0
+      },
       "charge": {
         "mode": "Disabled",
         "unit_limit": 0
@@ -51,7 +54,10 @@
           }
         }
       ],
-      "discharge": "None",
+      "discharge": {
+        "mode": "None",
+        "max_power": 0.0
+      },
       "charge": {
         "mode": {
           "Capacity": 1.0
@@ -77,7 +83,10 @@
         }
       ],
       "discharge": {
-        "Capacity": 1.0
+        "mode": {
+          "Capacity": 1.0
+        },
+        "max_power": 2500.0
       },
       "charge": {
         "mode": "Disabled",
@@ -101,7 +110,10 @@
           }
         }
       ],
-      "discharge": "None",
+      "discharge": {
+        "mode": "None",
+        "max_power": 0.0
+      },
       "charge": {
         "mode": {
           "Capacity": 1.0

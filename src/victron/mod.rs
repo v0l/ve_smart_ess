@@ -1,6 +1,7 @@
 pub mod client;
 pub mod ess;
 pub mod ve_bus;
+pub mod ve_battery;
 
 #[derive(Debug)]
 pub struct VictronError(pub String);
