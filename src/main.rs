@@ -38,7 +38,7 @@ pub async fn main() -> Result<(), VictronError> {
                 ControllerInputState {
                     system_load: out1.power,
                     soc: soc / 100.0,
-                    capacity: 2.4 * 3,
+                    capacity: 7.2,
                     voltage: 0.0,
                 },
             )
