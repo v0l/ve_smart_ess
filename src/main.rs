@@ -19,7 +19,7 @@ const INVERTER: u8 = 227;
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn main() -> Result<(), VictronError> {
-    let addr: SocketAddr = "10.100.1.58:502".parse().unwrap();
+    let addr: SocketAddr = "10.100.2.248:502".parse().unwrap();
     let mut vs = VictronBus::new(addr, INVERTER).await?;
     let mut ess = VictronESS::new(addr, INVERTER).await?;
 
