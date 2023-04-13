@@ -182,8 +182,7 @@ impl Controller {
                 .iter()
                 .fold(0f32, |acc, &s| acc + s.rate.reserve);
             let time_until_charge = next_charge.window.start - from;
-            let soc = (current_state.soc - (1.0 - self.dod)).max(0.0);
-            let kwh_capacity = current_state.capacity * soc;
+            let kwh_capacity = current_state.capacity * self.dod * current_state.soc;
             let remaining_capacity = (kwh_capacity - reserve).max(0.0);
 
             let battery_load = match current_sch.rate.discharge.mode {
@@ -195,11 +194,12 @@ impl Controller {
                 _ => 0.0,
             }.min(current_sch.rate.discharge.max_power).max(0.0);
 
-            let disable_feed_in = remaining_capacity == 0.0 || battery_load == 0.0;
+            let disable_feed_in = remaining_capacity == 0.0 || battery_load == 0.0 ||
+                current_state.soc <= (1.0 - self.dod);
             return Ok(ControllerOutputState {
                 disable_charge: true,
                 disable_feed_in,
-                soc,
+                soc: current_state.soc,
                 grid_load: (current_state.system_load - battery_load).max(0.0),
                 battery_load,
                 using_capacity: remaining_capacity,
