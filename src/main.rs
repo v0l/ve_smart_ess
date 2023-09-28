@@ -13,7 +13,7 @@ use crate::victron::ve_battery::VictronBattery;
 mod smart_ess;
 mod victron;
 
-const INVERTER: u8 = 276;
+const INVERTER: u8 = 227;
 //const BATTERY: u8 = 225;
 //const SYSTEM: u8 = 100;
 
