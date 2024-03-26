@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use crate::victron::client::VictronClient;
 use crate::victron::{Line, LineDetail, Side, VictronError};
 use std::net::SocketAddr;
@@ -14,15 +15,16 @@ pub enum Mode {
     Off = 4,
 }
 
-impl ToString for Mode {
-    fn to_string(&self) -> String {
-        match self {
+impl Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
             Mode::ChargerOnly => "Charger Only",
             Mode::InverterOnly => "Inverter Only",
             Mode::On => "On",
             Mode::Off => "Off",
         }
-        .to_owned()
+            .to_owned();
+        write!(f, "{}", str)
     }
 }
 

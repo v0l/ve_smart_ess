@@ -1,8 +1,10 @@
-use crate::victron::VictronError;
 use std::io::Error;
 use std::net::SocketAddr;
-use tokio_modbus::client::{tcp, Context, Reader, Writer};
+
+use tokio_modbus::client::{Context, Reader, tcp, Writer};
 use tokio_modbus::slave::{Slave, SlaveContext};
+
+use crate::victron::VictronError;
 
 pub(crate) struct VictronClient {
     client: Context,
@@ -29,7 +31,8 @@ impl VictronClient {
     }
 
     pub async fn write_u16(&mut self, addr: u16, value: u16) -> Result<(), VictronError> {
-        Ok(self.client.write_single_register(addr, value).await?)
+        Ok(self.client.write_single_register(addr, value).await
+            .map_err(|e| VictronError(e.to_string()))?.map_err(|e| VictronError(e.to_string()))?)
     }
 
     pub async fn read_bool(&mut self, addr: u16) -> Result<bool, VictronError> {
@@ -49,7 +52,7 @@ impl VictronClient {
             .client
             .read_input_registers(addr, 1)
             .await
-            .map_err(|e| VictronError(e.to_string()))?;
+            .map_err(|e| VictronError(e.to_string()))?.map_err(|e| VictronError(e.to_string()))?;
         Ok(v[0] as u16)
     }
 }

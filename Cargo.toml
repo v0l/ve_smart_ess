@@ -3,12 +3,10 @@ name = "ve_smart_ess"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
-async-trait = "0.1.53"
-tokio = { version = "*", features = ["macros", "rt"] }
-tokio-modbus = { version = "*", default-features = false, features = ["tcp"] }
-chrono = "0.4.19"
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.79"
+async-trait = "0.1.79"
+tokio = { version = "1.36.0", features = ["macros", "rt-multi-thread", "time"] }
+tokio-modbus = { version = "0.12.0", default-features = false, features = ["tcp"] }
+chrono = "0.4.35"
+serde = { version = "1.0.197", features = ["derive"] }
+serde_json = "1.0.115"

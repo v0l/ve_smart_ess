@@ -1,14 +1,14 @@
 extern crate core;
 
+use std::net::SocketAddr;
+use std::time::Duration;
+
+use chrono::{Local, Utc};
+
 use crate::smart_ess::{Controller, ControllerInputState};
+use crate::victron::{ess, Line, Side, VictronError};
 use crate::victron::ess::VictronESS;
 use crate::victron::ve_bus::VictronBus;
-use crate::victron::{ess, Line, Side, VictronError};
-use chrono::{Local, Utc};
-use std::net::SocketAddr;
-use std::thread::sleep;
-use std::time::Duration;
-use crate::victron::ve_battery::VictronBattery;
 
 mod smart_ess;
 mod victron;
@@ -17,7 +17,7 @@ const INVERTER: u8 = 227;
 //const BATTERY: u8 = 225;
 //const SYSTEM: u8 = 100;
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main]
 pub async fn main() -> Result<(), VictronError> {
     let addr: SocketAddr = "10.100.2.17:502".parse().unwrap();
     let mut vs = VictronBus::new(addr, INVERTER).await?;
@@ -41,8 +41,7 @@ pub async fn main() -> Result<(), VictronError> {
                     capacity: 7.2,
                     voltage: 0.0,
                 },
-            )
-            .unwrap();
+            ).unwrap();
         println!("{}", desired_state);
 
         let target_set_point = (desired_state.grid_load as i16).max(50);
@@ -55,6 +54,6 @@ pub async fn main() -> Result<(), VictronError> {
         ess.set_param(ess::Register::DisableCharge(desired_state.disable_charge))
             .await?;
 
-        sleep(Duration::from_secs(10))
+        tokio::time::sleep(Duration::from_secs(10)).await;
     }
 }
